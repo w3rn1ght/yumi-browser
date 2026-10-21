@@ -19,6 +19,17 @@ jobs:
           set -euo pipefail
           brew install ldid xz dpkg
 
+      - name: Pick Xcode 15 (если доступен)
+        run: |
+          set -euo pipefail
+          for v in 15.4 15.3 15.2 15.1 15.0; do
+            if [ -d "/Applications/Xcode_${v}.app" ]; then
+              sudo xcode-select -s "/Applications/Xcode_${v}.app"
+              break
+            fi
+          done
+          xcodebuild -version
+
       - name: Install Theos
         run: |
           set -euo pipefail
@@ -42,7 +53,7 @@ jobs:
           echo "APP=$APP" >> "$GITHUB_ENV"
           if [ ! -d "$APP/LaunchScreen.storyboardc" ]; then
             echo "::warning::LaunchScreen.storyboardc отсутствует — компилирую вручную"
-            if ! ibtool --compile "$APP/LaunchScreen.storyboardc" LaunchScreen.storyboard \
+            if ! xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" LaunchScreen.storyboard \
               --minimum-deployment-target 12.0 \
               --target-device iphone --target-device ipad; then
               echo "::warning::ibtool не смог собрать LaunchScreen — приложение будет без launch screen"

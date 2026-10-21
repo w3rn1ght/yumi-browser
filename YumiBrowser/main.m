@@ -18,7 +18,8 @@
     self.browser = [[BrowserViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.browser];
     nav.toolbarHidden = NO;
-    nav.navigationBar.translucent = YES;
+    nav.navigationBar.translucent = NO;
+    nav.toolbar.translucent = NO;
     self.window.rootViewController = nav;
     [self.window makeKeyAndVisible];
 
