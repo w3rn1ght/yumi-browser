@@ -1,0 +1,9 @@
+Package: com.yumi.browser
+Name: Yumi Browser
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Browser for iOS 12 with native HLS/mp4 stream hand-off (AVPlayer), Referer/User-Agent/Cookie injection and WebKit ad blocking.
+Maintainer: Artem
+Author: Artem
+Section: Applications
+Depends: firmware (>= 12.0)

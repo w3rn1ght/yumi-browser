@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      THEOS: ${{ github.workspace }}/theos
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          brew install ldid xz dpkg
+
+      - name: Install Theos
+        run: |
+          set -euo pipefail
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
+          ls "$THEOS"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          make clean || true
+          make package FINALPACKAGE=1
+
+      - name: Fix launch storyboard if Theos skipped it
+        run: |
+          set -euo pipefail
+          PKG=$(ls packages/*.deb | head -n1)
+          rm -rf /tmp/debroot
+          mkdir -p /tmp/debroot
+          dpkg-deb -R "$PKG" /tmp/debroot
+          APP=$(find /tmp/debroot/Applications -maxdepth 1 -name '*.app' | head -n1)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          if [ ! -d "$APP/LaunchScreen.storyboardc" ]; then
+            echo "::warning::LaunchScreen.storyboardc отсутствует — компилирую вручную"
+            ibtool --compile "$APP/LaunchScreen.storyboardc" LaunchScreen.storyboard \
+              --minimum-deployment-target 12.0 \
+              --target-device iphone --target-device ipad
+          fi
+          ls -la "$APP"
+          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.0.deb
+
+      - name: Make unsigned IPA
+        run: |
+          set -euo pipefail
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/Yumi.app
+          cd build
+          zip -qry Yumi-unsigned.ipa Payload
+          ls -la
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yumi-packages
+          path: |
+            packages/Yumi-1.0.0.deb
+            build/Yumi-unsigned.ipa
+          if-no-files-found: error

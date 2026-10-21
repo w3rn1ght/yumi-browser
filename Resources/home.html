@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yumi</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 28px 18px 40px;
+    font: -apple-system-body;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #f2f3f7; color: #101114;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0f1115; color: #f2f3f7; }
+    .card { background: #1a1d24 !important; border-color: #262b35 !important; }
+    .sub { color: #9aa3b2 !important; }
+    .search { background: #1a1d24 !important; border-color: #262b35 !important; color: #f2f3f7 !important; }
+  }
+  h1 { font-size: 30px; margin: 6px 0 4px; letter-spacing: -0.5px; }
+  .lead { color: #6b7280; font-size: 14px; margin: 0 0 18px; line-height: 1.4; }
+  form { display: flex; gap: 8px; margin: 0 0 22px; }
+  .search {
+    flex: 1; height: 44px; border-radius: 12px; border: 1px solid #d9dce3;
+    background: #fff; padding: 0 14px; font-size: 16px; outline: none;
+  }
+  .go {
+    height: 44px; padding: 0 18px; border-radius: 12px; border: 0;
+    background: #2f6fed; color: #fff; font-size: 16px; font-weight: 600;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (min-width: 620px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+  a.card {
+    display: block; text-decoration: none; color: inherit;
+    background: #fff; border: 1px solid #e2e5eb; border-radius: 14px; padding: 14px;
+  }
+  .name { font-weight: 600; font-size: 15px; margin-bottom: 3px; }
+  .sub { color: #6b7280; font-size: 12px; line-height: 1.35; }
+  .tag {
+    display: inline-block; margin-top: 8px; font-size: 10px; font-weight: 700;
+    letter-spacing: .4px; text-transform: uppercase; padding: 3px 7px; border-radius: 6px;
+  }
+  .ok { background: #e6f0ff; color: #2f6fed; }
+  .no { background: #ffe8e6; color: #d93a2b; }
+  .note {
+    margin-top: 20px; font-size: 12.5px; line-height: 1.5; color: #6b7280;
+    border-left: 3px solid #2f6fed; padding-left: 12px;
+  }
+</style>
+</head>
+<body>
+  <h1>Yumi</h1>
+  <p class="lead">Браузер для iOS 12. Плееры открываются нативно: находим поток и играем в AVPlayer.</p>
+
+  <form onsubmit="var q=document.getElementById('q').value.trim(); if(q){location.href='https://yandex.ru/search/?text='+encodeURIComponent(q);} return false;">
+    <input id="q" class="search" type="search" placeholder="Найти или ввести адрес" autocomplete="off" autocapitalize="off">
+    <button class="go" type="submit">Найти</button>
+  </form>
+
+  <div class="grid">
+    <a class="card" href="https://old.yummyani.me">
+      <div class="name">YummyAnime</div>
+      <div class="sub">old.yummyani.me</div>
+      <span class="tag ok">плееры</span>
+    </a>
+    <a class="card" href="https://anilibria.tv">
+      <div class="name">AniLibria</div>
+      <div class="sub">anilibria.tv</div>
+      <span class="tag ok">плееры</span>
+    </a>
+    <a class="card" href="https://hdrezka.ag">
+      <div class="name">HDrezka</div>
+      <div class="sub">hdrezka.ag</div>
+      <span class="tag ok">плееры</span>
+    </a>
+    <a class="card" href="https://www.kinopoisk.ru">
+      <div class="name">Кинопоиск</div>
+      <div class="sub">DRM: платное видео не играет</div>
+      <span class="tag no">только страницы</span>
+    </a>
+    <a class="card" href="https://m.vk.com/video">
+      <div class="name">VK Видео</div>
+      <div class="sub">m.vk.com</div>
+      <span class="tag ok">плееры</span>
+    </a>
+    <a class="card" href="https://m.youtube.com">
+      <div class="name">YouTube</div>
+      <div class="sub">m.youtube.com</div>
+      <span class="tag ok">плееры</span>
+    </a>
+  </div>
+
+  <p class="note">
+    Если на странице запустился плеер — сверху появится плашка «Поток найден» с кнопкой ▶.
+    Она открывает видео в системном плеере с правильными Referer и cookies.
+    Кинопоиск: платный контент закрыт DRM (Widevine/FairPlay), на iOS 12 он не играет ни в одном браузере.
+  </p>
+</body>
+</html>
