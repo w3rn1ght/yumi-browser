@@ -101,7 +101,7 @@ static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
 }
 
 - (void)reset {
-    NSUserDefaults *d = [[self defaults] dictionaryRepresentation];
+    NSDictionary *d = [[self defaults] dictionaryRepresentation];
     for (NSString *key in d.allKeys) {
         if ([key hasPrefix:@"Yumi"]) [[self defaults] removeObjectForKey:key];
     }
