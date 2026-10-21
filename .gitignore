@@ -4,3 +4,4 @@ build/
 *.deb
 *.ipa
 .DS_Store
+artifacts/
