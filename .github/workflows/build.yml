@@ -42,9 +42,12 @@ jobs:
           echo "APP=$APP" >> "$GITHUB_ENV"
           if [ ! -d "$APP/LaunchScreen.storyboardc" ]; then
             echo "::warning::LaunchScreen.storyboardc отсутствует — компилирую вручную"
-            ibtool --compile "$APP/LaunchScreen.storyboardc" LaunchScreen.storyboard \
+            if ! ibtool --compile "$APP/LaunchScreen.storyboardc" LaunchScreen.storyboard \
               --minimum-deployment-target 12.0 \
-              --target-device iphone --target-device ipad
+              --target-device iphone --target-device ipad; then
+              echo "::warning::ibtool не смог собрать LaunchScreen — приложение будет без launch screen"
+              rm -rf "$APP/LaunchScreen.storyboardc"
+            fi
           fi
           ls -la "$APP"
           dpkg-deb -b /tmp/debroot packages/Yumi-1.0.0.deb

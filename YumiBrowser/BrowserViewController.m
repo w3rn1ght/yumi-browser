@@ -922,15 +922,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         if ([existing[@"url"] isEqualToString:urlString]) return;
     }
 
+    NSLog(@"[Yumi] stream %@ %@ (page: %@)", info[@"kind"], urlString, info[@"page"]);
+
     NSMutableDictionary *entry = [info mutableCopy];
     entry[@"url"] = urlString;
     if (tab) entry[@"tab"] = tab;
     [self.streams insertObject:entry atIndex:0];
     while (self.streams.count > 12) [self.streams removeLastObject];
 
-    [self showStreamBannerWithInfo:entry];
+    BOOL isActiveTab = (tab == nil || tab == self.activeTab);
+    if (isActiveTab) {
+        [self showStreamBannerWithInfo:entry];
+    }
 
-    if ([YumiSettings shared].autoNativePlayer && [entry[@"kind"] isEqualToString:@"hls"]) {
+    if (isActiveTab && [YumiSettings shared].autoNativePlayer && [entry[@"kind"] isEqualToString:@"hls"]) {
         [self playStreamInfo:entry];
     }
 }
