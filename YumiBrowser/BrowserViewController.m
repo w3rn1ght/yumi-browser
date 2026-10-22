@@ -11,6 +11,7 @@
 #import "YummyEpisodesViewController.h"
 #import "YumiSiteStore.h"
 #import "YumiResumeStore.h"
+#import "YumiAnilibriaResolver.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
@@ -40,6 +41,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, strong) UIButton *yummyButton;
 @property (nonatomic, strong) UIButton *resumeButton;
 @property (nonatomic, copy) NSString *yummyPageID;
+@property (nonatomic, copy) NSString *anilibriaPageID;
 @property (nonatomic, copy) NSDictionary *resumeInfo;
 
 @end
@@ -433,7 +435,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)goBackTapped { [self.activeTab goBack]; [self updateChrome]; }
 - (void)goForwardTapped { [self.activeTab goForward]; [self updateChrome]; }
-- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; self.yummyPageID = nil; self.resumeInfo = nil; self.yummyButton.hidden = YES; self.resumeButton.hidden = YES; [self updateChrome]; }
+- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; self.yummyPageID = nil; self.anilibriaPageID = nil; self.resumeInfo = nil; self.yummyButton.hidden = YES; self.resumeButton.hidden = YES; [self updateChrome]; }
 
 - (void)reloadTapped {
     if (self.activeTab.isLoading) [self.activeTab stopLoading];
@@ -593,8 +595,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 #pragma mark - Потоки
 
 - (void)showStreamsList {
-    BOOL hasYummy = self.yummyPageID.length > 0;
-    NSDictionary *resume = hasYummy ? [YumiResumeStore resumeForPageID:self.yummyPageID] : nil;
+    BOOL hasYummy = (self.yummyPageID.length > 0 || self.anilibriaPageID.length > 0);
+    NSString *mediaPageID = self.anilibriaPageID.length ? self.anilibriaPageID : self.yummyPageID;
+    NSDictionary *resume = mediaPageID.length ? [YumiResumeStore resumeForPageID:mediaPageID] : nil;
 
     if (!self.streams.count && !hasYummy) {
         [self showToast:@"Потоки пока не найдены"];
@@ -712,6 +715,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         player.episode = [resume[@"episode"] description];
         player.dubbing = [resume[@"dubbing"] description];
         player.startTime = [resume[@"startTime"] doubleValue];
+        if ([resume[@"qualities"] isKindOfClass:[NSArray class]]) {
+            player.qualityOptions = resume[@"qualities"];
+        }
 
         __weak typeof(self) weakSelf = self;
         player.onDismiss = ^{
@@ -929,8 +935,12 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     if (tab != self.activeTab) return;
 
     NSURL *url = tab.webView.URL;
-    if (![YumiYummyResolver isItemURL:url]) {
+    BOOL isYummy = [YumiYummyResolver isItemURL:url];
+    BOOL isAnilibria = [YumiAnilibriaResolver isItemURL:url];
+
+    if (!isYummy && !isAnilibria) {
         self.yummyPageID = nil;
+        self.anilibriaPageID = nil;
         self.resumeInfo = nil;
         self.yummyButton.hidden = YES;
         self.resumeButton.hidden = YES;
@@ -938,13 +948,17 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }
 
     __weak typeof(self) weakSelf = self;
-    NSString *script =
-        @"(function(){"
-         "var m=document.querySelector('meta#short_link');"
-         "if(m){var r=/a(\\d+)$/.exec(m.getAttribute('content')||'');if(r)return r[1];}"
-         "var el=document.querySelector('.rating-info[data-id]');"
-         "return el?el.getAttribute('data-id'):'';"
-         "})()";
+    NSString *script = nil;
+    if (isAnilibria) {
+        script = [YumiAnilibriaResolver pageIDScript];
+    } else {
+        script = @"(function(){"
+                  "var m=document.querySelector('meta#short_link');"
+                  "if(m){var r=/a(\\d+)$/.exec(m.getAttribute('content')||'');if(r)return r[1];}"
+                  "var el=document.querySelector('.rating-info[data-id]');"
+                  "return el?el.getAttribute('data-id'):'';"
+                  "})()";
+    }
 
     [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -954,13 +968,21 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
             NSString *pageID = [result isKindOfClass:[NSString class]] ? result : nil;
             if (error || !pageID.length) {
-                self.yummyPageID = nil;
+                if (isAnilibria) self.anilibriaPageID = nil;
+                else self.yummyPageID = nil;
                 self.resumeInfo = nil;
                 self.yummyButton.hidden = YES;
                 self.resumeButton.hidden = YES;
                 return;
             }
-            self.yummyPageID = pageID;
+
+            if (isAnilibria) {
+                self.anilibriaPageID = pageID;
+                self.yummyPageID = nil;
+            } else {
+                self.yummyPageID = pageID;
+                self.anilibriaPageID = nil;
+            }
             self.yummyButton.hidden = NO;
 
             NSDictionary *resume = [YumiResumeStore resumeForPageID:pageID];
@@ -982,17 +1004,63 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)openYummyEpisodes {
-    if (!self.yummyPageID.length) {
-        [self showToast:@"Не удалось определить id аниме"];
+    YumiTab *tab = self.activeTab;
+    BOOL isAnilibria = self.anilibriaPageID.length > 0;
+    NSString *pageID = isAnilibria ? self.anilibriaPageID : self.yummyPageID;
+    if (!pageID.length) {
+        [self showToast:@"Не удалось определить id тайтла"];
         return;
     }
 
-    YumiTab *tab = self.activeTab;
-    NSDictionary *resume = [YumiResumeStore resumeForPageID:self.yummyPageID];
+    NSDictionary *resume = [YumiResumeStore resumeForPageID:pageID];
+    YumiEpisodesFetchBlock fetchBlock = nil;
+    YumiEpisodeResolveBlock resolveBlock = nil;
+
+    if (isAnilibria) {
+        WKWebView *webView = tab.webView;
+        NSString *alPageID = [pageID copy];
+        fetchBlock = ^(void (^done)(NSArray<NSDictionary *> *, NSError *)) {
+            [YumiAnilibriaResolver fetchEpisodesFromWebView:webView pageID:alPageID completion:done];
+        };
+        resolveBlock = ^(NSDictionary *source,
+                         NSString *episode,
+                         void (^done)(NSURL *, NSDictionary<NSString *,NSString *> *,
+                                      NSArray<NSDictionary<NSString *,NSString *> *> *,
+                                      NSString *, NSError *)) {
+            [YumiAnilibriaResolver resolveSource:source
+                                         episode:episode
+                                          pageID:alPageID
+                                         webView:webView
+                                      completion:done];
+        };
+    } else {
+        NSString *yummyPageID = [pageID copy];
+        fetchBlock = ^(void (^done)(NSArray<NSDictionary *> *, NSError *)) {
+            [YumiYummyResolver fetchEpisodesWithPageID:yummyPageID completion:done];
+        };
+        resolveBlock = ^(NSDictionary *source,
+                         NSString *episode,
+                         void (^done)(NSURL *, NSDictionary<NSString *,NSString *> *,
+                                      NSArray<NSDictionary<NSString *,NSString *> *> *,
+                                      NSString *, NSError *)) {
+            [YumiYummyResolver resolveStreamWithAnimeID:[source[@"animeID"] description]
+                                                episode:episode
+                                                dubbing:[source[@"dubbing"] description]
+                                             completion:^(NSURL *url,
+                                                          NSDictionary<NSString *,NSString *> *headers,
+                                                          NSString *title,
+                                                          NSError *error) {
+                done(url, headers, nil, title, error);
+            }];
+        };
+    }
+
     YummyEpisodesViewController *vc =
-        [[YummyEpisodesViewController alloc] initWithPageID:self.yummyPageID
+        [[YummyEpisodesViewController alloc] initWithPageID:pageID
                                                   pageTitle:tab.title ?: @""
-                                                     resume:resume];
+                                                     resume:resume
+                                                 fetchBlock:fetchBlock
+                                               resolveBlock:resolveBlock];
     vc.delegate = self;
 
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
@@ -1001,6 +1069,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)openYummyResume {
+    if (self.anilibriaPageID.length) {
+        [self openAnilibriaResume];
+        return;
+    }
+
     NSDictionary *resume = [YumiResumeStore resumeForPageID:self.yummyPageID];
     if (!resume) {
         [self showToast:@"Нет сохранённой позиции"];
@@ -1044,6 +1117,89 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         info[@"startTime"] = resume[@"time"] ?: @0;
         info[@"pageID"] = self.yummyPageID ?: @"";
         [self presentPlayerWithURL:url headers:headers title:finalTitle resume:info];
+    }];
+}
+
+- (void)openAnilibriaResume {
+    NSDictionary *resume = [YumiResumeStore resumeForPageID:self.anilibriaPageID];
+    if (!resume) {
+        [self showToast:@"Нет сохранённой позиции"];
+        return;
+    }
+
+    NSString *pageID = self.anilibriaPageID;
+    NSString *episode = [resume[@"episode"] description] ?: @"";
+    NSString *dubbing = [resume[@"dubbing"] description] ?: @"";
+    WKWebView *webView = self.activeTab.webView;
+
+    [self showToast:@"Загружаю видео…"];
+
+    __weak typeof(self) weakSelf = self;
+    [YumiAnilibriaResolver fetchEpisodesFromWebView:webView
+                                            pageID:pageID
+                                        completion:^(NSArray<NSDictionary *> *episodes, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        if (error) {
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Не удалось продолжить"
+                                                    message:error.localizedDescription
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentController:alert];
+            return;
+        }
+
+        NSDictionary *source = nil;
+        for (NSDictionary *item in episodes) {
+            if ([[item[@"episode"] description] isEqualToString:episode] &&
+                [[item[@"dubbing"] description] isEqualToString:dubbing]) {
+                source = item;
+                break;
+            }
+        }
+        if (!source) {
+            [self openYummyEpisodes];
+            return;
+        }
+
+        [YumiAnilibriaResolver resolveSource:source
+                                     episode:episode
+                                      pageID:pageID
+                                     webView:webView
+                                  completion:^(NSURL *url,
+                                               NSDictionary<NSString *,NSString *> *headers,
+                                               NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
+                                               NSString *title,
+                                               NSError *error2) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+
+            if (error2 || !url) {
+                UIAlertController *alert =
+                    [UIAlertController alertControllerWithTitle:@"Не удалось продолжить"
+                                                        message:error2.localizedDescription ?: @"Неизвестная ошибка"
+                                                 preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                [self presentController:alert];
+                return;
+            }
+
+            NSString *pageTitle = self.activeTab.title ?: @"";
+            NSString *finalTitle = title ?: @"";
+            if (pageTitle.length && finalTitle.length) {
+                finalTitle = [NSString stringWithFormat:@"%@ — %@", pageTitle, finalTitle];
+            } else if (pageTitle.length) {
+                finalTitle = pageTitle;
+            }
+
+            NSMutableDictionary *info = [resume mutableCopy];
+            info[@"startTime"] = resume[@"time"] ?: @0;
+            info[@"pageID"] = pageID;
+            if (qualities.count) info[@"qualities"] = qualities;
+            [self presentPlayerWithURL:url headers:headers title:finalTitle resume:info];
+        }];
     }];
 }
 
@@ -1167,8 +1323,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)tab:(YumiTab *)tab didUpdateURL:(NSURL *)url {
     if (tab != self.activeTab) return;
-    if (![YumiYummyResolver isItemURL:url]) {
+    if (![YumiYummyResolver isItemURL:url] && ![YumiAnilibriaResolver isItemURL:url]) {
         self.yummyPageID = nil;
+        self.anilibriaPageID = nil;
         self.resumeInfo = nil;
         self.yummyButton.hidden = YES;
         self.resumeButton.hidden = YES;

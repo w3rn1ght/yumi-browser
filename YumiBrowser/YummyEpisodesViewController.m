@@ -1,11 +1,12 @@
 #import "YummyEpisodesViewController.h"
-#import "YumiYummyResolver.h"
 #import "YumiResumeStore.h"
 
 @interface YummyEpisodesViewController ()
 @property (nonatomic, copy) NSString *pageID;
 @property (nonatomic, copy) NSString *pageTitle;
 @property (nonatomic, copy) NSDictionary *resumeInfo;
+@property (nonatomic, copy) YumiEpisodesFetchBlock fetchBlock;
+@property (nonatomic, copy) YumiEpisodeResolveBlock resolveBlock;
 
 @property (nonatomic, copy) NSArray<NSString *> *episodeNumbers;
 @property (nonatomic, copy) NSDictionary<NSString *, NSArray<NSDictionary *> *> *voices;
@@ -30,12 +31,16 @@
 
 - (instancetype)initWithPageID:(NSString *)pageID
                      pageTitle:(NSString *)pageTitle
-                        resume:(NSDictionary *)resume {
+                        resume:(NSDictionary *)resume
+                    fetchBlock:(YumiEpisodesFetchBlock)fetchBlock
+                  resolveBlock:(YumiEpisodeResolveBlock)resolveBlock {
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
         _pageID = [pageID copy];
         _pageTitle = [pageTitle copy];
         _resumeInfo = [resume copy];
+        _fetchBlock = [fetchBlock copy];
+        _resolveBlock = [resolveBlock copy];
         _episodeNumbers = @[];
         _voices = @{};
     }
@@ -291,8 +296,11 @@
     [self showLoading:YES];
 
     __weak typeof(self) weakSelf = self;
-    [YumiYummyResolver fetchEpisodesWithPageID:self.pageID
-                                    completion:^(NSArray<NSDictionary *> *episodes, NSError *error) {
+    if (!self.fetchBlock) {
+        [self showError:@"Источник не настроен."];
+        return;
+    }
+    self.fetchBlock(^(NSArray<NSDictionary *> *episodes, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
@@ -314,7 +322,7 @@
         [self selectDefaults];
         [self showLoading:NO];
         [self updateUI];
-    }];
+    });
 }
 
 - (void)buildVoicesFromEpisodes:(NSArray<NSDictionary *> *)episodes {
@@ -499,16 +507,21 @@
 
     [self setBusy:YES];
 
-    NSString *animeID = [source[@"animeID"] description];
     NSString *episode = self.selectedEpisode;
     NSString *dubbing = self.selectedVoice;
     NSTimeInterval start = [self startTimeForSelection];
+    NSString *animeID = [source[@"animeID"] description] ?: @"";
 
     __weak typeof(self) weakSelf = self;
-    [YumiYummyResolver resolveStreamWithAnimeID:animeID
-                                        episode:episode
-                                        dubbing:dubbing
-                                     completion:^(NSURL *url, NSDictionary<NSString *,NSString *> *headers, NSString *title, NSError *error) {
+    if (!self.resolveBlock) {
+        [self setBusy:NO];
+        return;
+    }
+    self.resolveBlock(source, episode ?: @"", ^(NSURL *url,
+                                                 NSDictionary<NSString *,NSString *> *headers,
+                                                 NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
+                                                 NSString *title,
+                                                 NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
@@ -531,13 +544,14 @@
             finalTitle = self.pageTitle;
         }
 
-        NSDictionary *resume = @{
+        NSMutableDictionary *resume = [@{
             @"pageID": self.pageID ?: @"",
-            @"animeID": animeID ?: @"",
+            @"animeID": animeID,
             @"episode": episode ?: @"",
             @"dubbing": dubbing ?: @"",
             @"startTime": @(start)
-        };
+        } mutableCopy];
+        if (qualities.count) resume[@"qualities"] = qualities;
 
         [self.delegate yummyEpisodesController:self
                                  playStreamURL:url
