@@ -1,8 +1,10 @@
 import io, os, tarfile, lzma, gzip, plistlib, sys
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-deb = os.path.join(root, "artifacts", "v1.0.1", "packages", "Yumi-1.0.1.deb")
-ipa = os.path.join(root, "artifacts", "v1.0.1", "build", "Yumi-unsigned.ipa")
+default_deb = os.path.join(root, "artifacts", "v1.0.2", "Yumi-1.0.2.deb")
+default_ipa = os.path.join(root, "artifacts", "v1.0.2", "Yumi-unsigned.ipa")
+deb = sys.argv[1] if len(sys.argv) > 1 else default_deb
+ipa = sys.argv[2] if len(sys.argv) > 2 else default_ipa
 
 def ar_members(path):
     with open(path, "rb") as f:
@@ -60,7 +62,7 @@ with zipfile.ZipFile(ipa) as z:
     bin_name = [n for n in names if n.endswith("/" + pl["CFBundleExecutable"])][0]
     blob = z.read(bin_name)
     print("binary:", bin_name, len(blob), "bytes")
-    for needle in ["Серии", "Не удалось определить id аниме", "plapi.cdnvideohub.com"]:
+    for needle in ["Серии", "Продолжить", "anilibria.fun", "plapi.cdnvideohub.com"]:
         u8 = needle.encode("utf-8") in blob
         u16 = needle.encode("utf-16-le") in blob
         print(f"  contains {needle!r}: utf8={u8} utf16={u16}")
