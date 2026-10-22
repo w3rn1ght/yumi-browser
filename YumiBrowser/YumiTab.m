@@ -32,6 +32,10 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
 @implementation YumiTab
 
 + (WKWebViewConfiguration *)defaultConfiguration {
+    return [self configurationWithDataStore:[WKWebsiteDataStore defaultDataStore]];
+}
+
++ (WKWebViewConfiguration *)configurationWithDataStore:(WKWebsiteDataStore *)store {
     YumiSettings *settings = [YumiSettings shared];
     WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
 
@@ -61,7 +65,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     if (anilibriaRules) [ucc addContentRuleList:anilibriaRules];
 
     cfg.userContentController = ucc;
-    cfg.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
+    cfg.websiteDataStore = store ?: [WKWebsiteDataStore defaultDataStore];
     cfg.preferences.javaScriptCanOpenWindowsAutomatically = YES;
     cfg.preferences.minimumFontSize = 0;
     cfg.allowsInlineMediaPlayback = YES;

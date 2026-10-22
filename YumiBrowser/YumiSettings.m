@@ -7,6 +7,7 @@ static NSString *const kYumiAdblock = @"YumiAdblock";
 static NSString *const kYumiAutoPlayer = @"YumiAutoPlayer";
 static NSString *const kYumiMediaHook = @"YumiMediaHook";
 static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
+static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 @implementation YumiSettings
 
@@ -25,6 +26,7 @@ static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
             [d setBool:YES forKey:kYumiAdblock];
             [d setBool:NO forKey:kYumiAutoPlayer];
             [d setBool:YES forKey:kYumiMediaHook];
+            [d setInteger:YumiSearchEngineYandex forKey:kYumiSearchEngine];
             [d synchronize];
         }
     }
@@ -51,6 +53,40 @@ static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
 
 - (BOOL)mediaHookEnabled { return [[self defaults] boolForKey:kYumiMediaHook]; }
 - (void)setMediaHookEnabled:(BOOL)v { [[self defaults] setBool:v forKey:kYumiMediaHook]; }
+
+- (YumiSearchEngine)searchEngine {
+    return (YumiSearchEngine)[[self defaults] integerForKey:kYumiSearchEngine];
+}
+
+- (void)setSearchEngine:(YumiSearchEngine)engine {
+    [[self defaults] setInteger:engine forKey:kYumiSearchEngine];
+}
+
+- (NSString *)searchEngineName {
+    switch (self.searchEngine) {
+        case YumiSearchEngineBing: return @"Bing";
+        case YumiSearchEngineDuckDuckGo: return @"DuckDuckGo";
+        default: return @"Яндекс";
+    }
+}
+
+- (NSURL *)searchURLForQuery:(NSString *)query {
+    NSString *text = [(query ?: @"") stringByTrimmingCharactersInSet:
+                      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!text.length) return nil;
+
+    NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
+        @"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"];
+    NSString *encoded = [text stringByAddingPercentEncodingWithAllowedCharacters:allowed] ?: text;
+
+    NSString *format = @"https://yandex.ru/search/?text=%@";
+    if (self.searchEngine == YumiSearchEngineBing) {
+        format = @"https://www.bing.com/search?q=%@";
+    } else if (self.searchEngine == YumiSearchEngineDuckDuckGo) {
+        format = @"https://html.duckduckgo.com/html/?q=%@";
+    }
+    return [NSURL URLWithString:[NSString stringWithFormat:format, encoded]];
+}
 
 #pragma mark - UA
 
@@ -109,6 +145,7 @@ static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
     self.adblockEnabled = YES;
     self.autoNativePlayer = NO;
     self.mediaHookEnabled = YES;
+    self.searchEngine = YumiSearchEngineYandex;
     [[self defaults] synchronize];
 }
 

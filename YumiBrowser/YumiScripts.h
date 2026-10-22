@@ -5,5 +5,7 @@
 + (NSString *)polyfills;
 + (NSString *)hook;
 + (NSString *)homeHTML;
++ (NSString *)webpHero;
++ (NSString *)webpImages;
 
 @end

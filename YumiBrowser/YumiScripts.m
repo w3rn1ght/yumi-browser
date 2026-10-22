@@ -24,5 +24,7 @@
 + (NSString *)polyfills { return [self stringFromResource:@"polyfills" extension:@"js"]; }
 + (NSString *)hook { return [self stringFromResource:@"hook" extension:@"js"]; }
 + (NSString *)homeHTML { return [self stringFromResource:@"home" extension:@"html"]; }
++ (NSString *)webpHero { return [self stringFromResource:@"webp-hero" extension:@"js"]; }
++ (NSString *)webpImages { return [self stringFromResource:@"webp-images" extension:@"js"]; }
 
 @end

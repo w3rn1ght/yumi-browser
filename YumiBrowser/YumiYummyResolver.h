@@ -24,6 +24,7 @@
                          dubbing:(NSString *)dubbing
                       completion:(void (^)(NSURL *url,
                                            NSDictionary<NSString *, NSString *> *headers,
+                                           NSArray<NSDictionary<NSString *, NSString *> *> *qualities,
                                            NSString *title,
                                            NSError *error))completion;
 

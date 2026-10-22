@@ -34,6 +34,7 @@
 @property (nonatomic, readonly) BOOL isLoading;
 
 + (WKWebViewConfiguration *)defaultConfiguration;
++ (WKWebViewConfiguration *)configurationWithDataStore:(WKWebsiteDataStore *)store;
 + (BOOL)isDirectMediaURL:(NSURL *)url;
 
 - (instancetype)initWithConfiguration:(WKWebViewConfiguration *)configuration

@@ -178,10 +178,14 @@ static NSString *YumiNormalize(NSString *string) {
 + (void)resolveStreamWithAnimeID:(NSString *)animeID
                          episode:(NSString *)episode
                          dubbing:(NSString *)dubbing
-                      completion:(void (^)(NSURL *, NSDictionary<NSString *, NSString *> *, NSString *, NSError *))completion {
+                      completion:(void (^)(NSURL *,
+                                           NSDictionary<NSString *, NSString *> *,
+                                           NSArray<NSDictionary<NSString *, NSString *> *> *,
+                                           NSString *,
+                                           NSError *))completion {
     if (!completion) return;
     if (!animeID.length || !episode.length) {
-        completion(nil, nil, nil, YumiYummyError(@"Нет id аниме или номера серии", -4));
+        completion(nil, nil, nil, nil, YumiYummyError(@"Нет id аниме или номера серии", -4));
         return;
     }
 
@@ -195,18 +199,18 @@ static NSString *YumiNormalize(NSString *string) {
     };
 
     YumiHTTPGET([NSURL URLWithString:playlist], apiHeaders, ^(id json, NSError *error) {
-        if (error) { completion(nil, nil, nil, error); return; }
+        if (error) { completion(nil, nil, nil, nil, error); return; }
 
         NSArray *items = [json isKindOfClass:[NSDictionary class]] ? ((NSDictionary *)json)[@"items"] : nil;
         if (![items isKindOfClass:[NSArray class]] || !items.count) {
-            completion(nil, nil, nil, YumiYummyError(@"CVH не вернул список озвучек", -5));
+            completion(nil, nil, nil, nil, YumiYummyError(@"CVH не вернул список озвучек", -5));
             return;
         }
 
         NSDictionary *chosen = [self chooseItem:items dubbing:dubbing];
         NSString *vkID = [chosen[@"vkId"] description];
         if (!vkID.length) {
-            completion(nil, nil, nil, YumiYummyError(@"CVH не вернул id видео", -6));
+            completion(nil, nil, nil, nil, YumiYummyError(@"CVH не вернул id видео", -6));
             return;
         }
 
@@ -214,33 +218,62 @@ static NSString *YumiNormalize(NSString *string) {
             @"https://plapi.cdnvideohub.com/api/v1/player/sv/video/%@", vkID];
 
         YumiHTTPGET([NSURL URLWithString:videoURL], apiHeaders, ^(id videoJSON, NSError *videoError) {
-            if (videoError) { completion(nil, nil, nil, videoError); return; }
+            if (videoError) { completion(nil, nil, nil, nil, videoError); return; }
 
             NSDictionary *sources = [videoJSON isKindOfClass:[NSDictionary class]]
                 ? ((NSDictionary *)videoJSON)[@"sources"] : nil;
             if (![sources isKindOfClass:[NSDictionary class]]) {
-                completion(nil, nil, nil, YumiYummyError(@"CVH не вернул источники видео", -7));
+                completion(nil, nil, nil, nil, YumiYummyError(@"CVH не вернул источники видео", -7));
                 return;
             }
 
-            NSString *stream = nil;
-            NSArray *keys = @[@"hlsUrl", @"mpegFullHdUrl", @"mpegHighUrl",
-                              @"mpegQhdUrl", @"mpeg2kUrl", @"mpeg4kUrl"];
-            for (NSString *key in keys) {
+            NSMutableArray<NSDictionary<NSString *, NSString *> *> *qualities = [NSMutableArray array];
+            NSMutableSet<NSString *> *knownURLs = [NSMutableSet set];
+            NSMutableSet<NSString *> *knownTitles = [NSMutableSet set];
+
+            NSString *hls = sources[@"hlsUrl"];
+            if ([hls isKindOfClass:[NSString class]] && hls.length) {
+                [qualities addObject:@{ @"title": @"Авто", @"url": hls }];
+                [knownURLs addObject:hls];
+                [knownTitles addObject:@"Авто"];
+            }
+
+            // CVH gives direct VK CDN files for fixed qualities. They are
+            // useful precisely when hlsUrl is a single-quality media playlist.
+            NSArray<NSArray<NSString *> *> *map = @[
+                @[@"mpeg4kUrl", @"4K"],
+                @[@"mpeg2kUrl", @"2K"],
+                @[@"mpegQhdUrl", @"1440p"],
+                @[@"mpegFullHdUrl", @"1080p"],
+                @[@"mpegHighUrl", @"720p"],
+                @[@"mpegMediumUrl", @"480p"],
+                @[@"mpegLowUrl", @"360p"],
+                @[@"mpegLowestUrl", @"240p"],
+                @[@"mpegTinyUrl", @"144p"]
+            ];
+            for (NSArray<NSString *> *pair in map) {
+                NSString *key = pair.firstObject;
+                NSString *title = pair.lastObject;
                 NSString *value = sources[key];
-                if ([value isKindOfClass:[NSString class]] && value.length) {
-                    stream = value;
-                    break;
-                }
+                if (![value isKindOfClass:[NSString class]] || !value.length) continue;
+                if ([knownURLs containsObject:value] || [knownTitles containsObject:title]) continue;
+                [knownURLs addObject:value];
+                [knownTitles addObject:title];
+                [qualities addObject:@{ @"title": title, @"url": value }];
+            }
+
+            NSString *stream = hls;
+            if (![stream isKindOfClass:[NSString class]] || !stream.length) {
+                stream = qualities.firstObject[@"url"];
             }
             if (!stream.length) {
-                completion(nil, nil, nil, YumiYummyError(@"Для этой озвучки нет доступного потока", -7));
+                completion(nil, nil, nil, nil, YumiYummyError(@"Для этой озвучки нет доступного потока", -7));
                 return;
             }
 
             NSURL *url = [NSURL URLWithString:stream];
             if (!url) {
-                completion(nil, nil, nil, YumiYummyError(@"Некорректный URL потока", -8));
+                completion(nil, nil, nil, nil, YumiYummyError(@"Некорректный URL потока", -8));
                 return;
             }
 
@@ -253,7 +286,7 @@ static NSString *YumiNormalize(NSString *string) {
             NSString *voice = chosen[@"voiceStudio"] ?: dubbing ?: @"";
             NSString *title = [NSString stringWithFormat:@"Серия %@%@", episode,
                                voice.length ? [NSString stringWithFormat:@" · %@", voice] : @""];
-            completion(url, headers, title, nil);
+            completion(url, headers, qualities, title, nil);
         });
     });
 }

@@ -20,6 +20,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 @property (nonatomic, strong) NSMutableArray<YumiTab *> *tabs;
 @property (nonatomic, assign) NSInteger activeIndex;
+@property (nonatomic, assign) BOOL incognito;
+@property (nonatomic, strong) WKWebsiteDataStore *incognitoDataStore;
 
 @property (nonatomic, strong) UITextField *addressField;
 @property (nonatomic, strong) UIProgressView *progressView;
@@ -43,6 +45,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, copy) NSString *yummyPageID;
 @property (nonatomic, copy) NSString *anilibriaPageID;
 @property (nonatomic, copy) NSDictionary *resumeInfo;
+
+- (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab;
+- (void)updateIncognitoAppearance;
+- (void)setIncognitoMode:(BOOL)enable;
 
 @end
 
@@ -78,12 +84,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                                object:nil];
 
     [self restoreSession];
+    [self updateIncognitoAppearance];
     [self updateChrome];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     self.navigationController.toolbarHidden = NO;
+    [self updateIncognitoAppearance];
     [self updateChrome];
 }
 
@@ -318,8 +326,19 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 #pragma mark - Вкладки
 
+- (WKWebsiteDataStore *)incognitoDataStore {
+    if (!_incognitoDataStore) {
+        _incognitoDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+    }
+    return _incognitoDataStore;
+}
+
 - (YumiTab *)createTab {
-    return [[YumiTab alloc] initWithConfiguration:nil delegate:self];
+    WKWebViewConfiguration *configuration = nil;
+    if (self.incognito) {
+        configuration = [YumiTab configurationWithDataStore:[self incognitoDataStore]];
+    }
+    return [[YumiTab alloc] initWithConfiguration:configuration delegate:self];
 }
 
 - (YumiTab *)createTabWithConfiguration:(WKWebViewConfiguration *)configuration {
@@ -466,10 +485,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     if (url) {
         [self.activeTab loadURL:url];
     } else {
-        NSString *encoded = [input stringByAddingPercentEncodingWithAllowedCharacters:
-                             [NSCharacterSet URLQueryAllowedCharacterSet]];
-        NSString *search = [NSString stringWithFormat:@"https://yandex.ru/search/?text=%@", encoded ?: @""];
-        [self.activeTab loadURL:[NSURL URLWithString:search]];
+        NSURL *searchURL = [[YumiSettings shared] searchURLForQuery:input];
+        if (searchURL) [self.activeTab loadURL:searchURL];
     }
     [self hideStreamBanner];
 }
@@ -521,6 +538,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [sheet addAction:[UIAlertAction actionWithTitle:@"Новая вкладка"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self addHomeTab]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:(self.incognito ? @"Выйти из инкогнито" : @"Инкогнито")
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self toggleIncognito]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Вкладки (%lu)", (unsigned long)self.tabs.count]
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showTabs]; }]];
@@ -550,6 +570,68 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
     sheet.popoverPresentationController.barButtonItem = self.menuItem;
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)toggleIncognito {
+    if (self.incognito) {
+        [self setIncognitoMode:NO];
+        return;
+    }
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Включить инкогнито?"
+                                            message:@"Текущие вкладки закроются. Cookies, кэш и история не сохранятся на устройстве."
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Включить" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+        [self setIncognitoMode:YES];
+    }]];
+    dispatch_async(dispatch_get_main_queue(), ^{ [self presentController:alert]; });
+}
+
+- (void)setIncognitoMode:(BOOL)enable {
+    if (self.incognito == enable) return;
+    self.incognito = enable;
+
+    for (YumiTab *tab in [self.tabs copy]) {
+        tab.delegate = nil;
+        [tab.webView stopLoading];
+        [tab.webView removeFromSuperview];
+    }
+    [self.tabs removeAllObjects];
+    [self.streams removeAllObjects];
+    [self hideStreamBanner];
+
+    self.yummyPageID = nil;
+    self.anilibriaPageID = nil;
+    self.resumeInfo = nil;
+    self.yummyButton.hidden = YES;
+    self.resumeButton.hidden = YES;
+    self.activeIndex = 0;
+
+    if (!enable) {
+        // Non-persistent store: releasing it drops all private cookies/cache.
+        _incognitoDataStore = nil;
+    }
+
+    [self addHomeTab];
+    [self updateIncognitoAppearance];
+    [self showToast:(enable ? @"Режим инкогнито" : @"Обычный режим")];
+}
+
+- (void)updateIncognitoAppearance {
+    UIColor *normalTint = [UIColor colorWithRed:0.18 green:0.45 blue:0.94 alpha:1.0];
+    UIColor *privateTint = [UIColor colorWithRed:0.45 green:0.26 blue:0.76 alpha:1.0];
+    UIColor *tint = self.incognito ? privateTint : normalTint;
+
+    self.view.tintColor = tint;
+    self.navigationController.navigationBar.tintColor = tint;
+    self.navigationController.toolbar.tintColor = tint;
+    self.addressField.placeholder = self.incognito ? @"Инкогнито — поиск или адрес" : @"Поиск или адрес";
+    self.addressField.backgroundColor = self.incognito
+        ? [UIColor colorWithRed:0.945 green:0.918 blue:1.0 alpha:1.0]
+        : [UIColor colorWithWhite:0.94 alpha:1.0];
+    self.addressField.textColor = self.incognito ? privateTint : [UIColor blackColor];
 }
 
 - (void)toggleDesktop {
@@ -597,7 +679,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)showStreamsList {
     BOOL hasYummy = (self.yummyPageID.length > 0 || self.anilibriaPageID.length > 0);
     NSString *mediaPageID = self.anilibriaPageID.length ? self.anilibriaPageID : self.yummyPageID;
-    NSDictionary *resume = mediaPageID.length ? [YumiResumeStore resumeForPageID:mediaPageID] : nil;
+    NSDictionary *resume = (mediaPageID.length && !self.incognito)
+        ? [YumiResumeStore resumeForPageID:mediaPageID] : nil;
 
     if (!self.streams.count && !hasYummy) {
         [self showToast:@"Потоки пока не найдены"];
@@ -710,11 +793,13 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     player.modalPresentationStyle = UIModalPresentationFullScreen;
 
     if (resume) {
-        player.resumeKey = [resume[@"pageID"] description];
-        player.animeID = [resume[@"animeID"] description];
-        player.episode = [resume[@"episode"] description];
-        player.dubbing = [resume[@"dubbing"] description];
-        player.startTime = [resume[@"startTime"] doubleValue];
+        if (!self.incognito) {
+            player.resumeKey = [resume[@"pageID"] description];
+            player.animeID = [resume[@"animeID"] description];
+            player.episode = [resume[@"episode"] description];
+            player.dubbing = [resume[@"dubbing"] description];
+            player.startTime = [resume[@"startTime"] doubleValue];
+        }
         if ([resume[@"qualities"] isKindOfClass:[NSArray class]]) {
             player.qualityOptions = resume[@"qualities"];
         }
@@ -801,16 +886,25 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)clearWebsiteData {
     NSSet *types = [WKWebsiteDataStore allWebsiteDataTypes];
+    NSMutableArray<WKWebsiteDataStore *> *stores =
+        [NSMutableArray arrayWithObject:[WKWebsiteDataStore defaultDataStore]];
+    if (self.incognito && _incognitoDataStore) [stores addObject:_incognitoDataStore];
+
     __weak typeof(self) weakSelf = self;
-    [[WKWebsiteDataStore defaultDataStore] removeDataOfTypes:types
-                                               modifiedSince:[NSDate dateWithTimeIntervalSince1970:0]
-                                           completionHandler:^{
+    dispatch_group_t group = dispatch_group_create();
+    for (WKWebsiteDataStore *store in stores) {
+        dispatch_group_enter(group);
+        [store removeDataOfTypes:types
+                   modifiedSince:[NSDate dateWithTimeIntervalSince1970:0]
+               completionHandler:^{
+            dispatch_group_leave(group);
+        }];
+    }
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
         [[NSURLCache sharedURLCache] removeAllCachedResponses];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            for (YumiTab *tab in weakSelf.tabs) [tab reload];
-            [weakSelf showToast:@"Данные очищены"];
-        });
-    }];
+        for (YumiTab *tab in weakSelf.tabs) [tab reload];
+        [weakSelf showToast:@"Данные очищены"];
+    });
 }
 
 - (void)confirmReset {
@@ -826,6 +920,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)resetEverything {
     [[YumiSettings shared] reset];
+    self.incognito = NO;
+    _incognitoDataStore = nil;
     for (YumiTab *tab in [self.tabs copy]) {
         tab.delegate = nil;
         [tab.webView stopLoading];
@@ -836,19 +932,28 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     self.activeIndex = 0;
     [self applySettingsToTabs];
     [self addHomeTab];
+    [self updateIncognitoAppearance];
     [self showToast:@"Настройки сброшены"];
 }
 
 #pragma mark - Сессия
 
 - (void)saveSession {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (self.incognito) {
+        // Never write private tab URLs/history to disk.
+        [defaults removeObjectForKey:kYumiSessionURLs];
+        [defaults removeObjectForKey:kYumiSessionIndex];
+        [defaults synchronize];
+        return;
+    }
+
     NSMutableArray *urls = [NSMutableArray array];
     for (YumiTab *tab in self.tabs) {
         NSString *string = tab.url.absoluteString;
         if (!string.length) string = tab.pendingURLString;
         [urls addObject:string ?: @""];
     }
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setObject:urls forKey:kYumiSessionURLs];
     [defaults setInteger:self.activeIndex forKey:kYumiSessionIndex];
     [defaults synchronize];
@@ -987,7 +1092,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             }
             self.yummyButton.hidden = NO;
 
-            NSDictionary *resume = [YumiResumeStore resumeForPageID:pageID];
+            NSDictionary *resume = self.incognito ? nil : [YumiResumeStore resumeForPageID:pageID];
             self.resumeInfo = resume;
             if (resume) {
                 NSTimeInterval time = [resume[@"time"] doubleValue];
@@ -1005,6 +1110,26 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }];
 }
 
+- (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab {
+    NSURL *url = tab.webView.URL;
+    if (![YumiAnilibriaResolver isSupportedHost:url.host]) return;
+
+    NSString *bundle = [YumiScripts webpHero];
+    NSString *boot = [YumiScripts webpImages];
+    if (!bundle.length || !boot.length) return;
+
+    // AniLibria serves covers as WebP, which WebKit on iOS 12 cannot decode.
+    // The polyfill is injected only here; other sites do not pay this cost.
+    NSString *script = [NSString stringWithFormat:
+        @"if(!window.__yumiWebpBooted){%@\n%@}", bundle, boot];
+
+    [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
+        if (error) {
+            NSLog(@"[Yumi] WebP polyfill failed: %@", error.localizedDescription);
+        }
+    }];
+}
+
 - (void)openYummyEpisodes {
     YumiTab *tab = self.activeTab;
     BOOL isAnilibria = self.anilibriaPageID.length > 0;
@@ -1014,7 +1139,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         return;
     }
 
-    NSDictionary *resume = [YumiResumeStore resumeForPageID:pageID];
+    NSDictionary *resume = self.incognito ? nil : [YumiResumeStore resumeForPageID:pageID];
     YumiEpisodesFetchBlock fetchBlock = nil;
     YumiEpisodeResolveBlock resolveBlock = nil;
 
@@ -1050,9 +1175,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                                 dubbing:[source[@"dubbing"] description]
                                              completion:^(NSURL *url,
                                                           NSDictionary<NSString *,NSString *> *headers,
+                                                          NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
                                                           NSString *title,
                                                           NSError *error) {
-                done(url, headers, nil, title, error);
+                done(url, headers, qualities, title, error);
             }];
         };
     }
@@ -1071,6 +1197,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)openYummyResume {
+    if (self.incognito) {
+        [self showToast:@"В инкогнито память просмотра не сохраняется"];
+        return;
+    }
     if (self.anilibriaPageID.length) {
         [self openAnilibriaResume];
         return;
@@ -1093,7 +1223,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [YumiYummyResolver resolveStreamWithAnimeID:animeID
                                         episode:episode
                                         dubbing:dubbing
-                                     completion:^(NSURL *url, NSDictionary<NSString *,NSString *> *headers, NSString *title, NSError *error) {
+                                     completion:^(NSURL *url,
+                                                  NSDictionary<NSString *,NSString *> *headers,
+                                                  NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
+                                                  NSString *title,
+                                                  NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 
@@ -1118,6 +1252,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         NSMutableDictionary *info = [resume mutableCopy];
         info[@"startTime"] = resume[@"time"] ?: @0;
         info[@"pageID"] = self.yummyPageID ?: @"";
+        if (qualities.count) info[@"qualities"] = qualities;
         [self presentPlayerWithURL:url headers:headers title:finalTitle resume:info];
     }];
 }
@@ -1306,6 +1441,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)tabDidFinishLoading:(YumiTab *)tab {
+    if ([YumiAnilibriaResolver isSupportedHost:tab.webView.URL.host]) {
+        [self installAnilibriaWebPSupportForTab:tab];
+    }
     if (tab != self.activeTab) return;
     self.progressView.progress = 1.0;
     [self refreshYummyAvailabilityForTab:tab];

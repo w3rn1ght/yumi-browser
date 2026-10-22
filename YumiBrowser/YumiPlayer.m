@@ -54,7 +54,7 @@ static NSString *YumiEncode(NSString *s) {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
 
-    if (self.qualityOptions.count) {
+    if (self.qualityOptions.count >= 2) {
         self.externalQuality = YES;
         self.selectedQualityTitle = self.qualityOptions.firstObject[@"title"];
     }
@@ -137,12 +137,16 @@ static NSString *YumiEncode(NSString *s) {
     b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 13);
     b.hidden = YES;
     [b addTarget:self action:@selector(qualityTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:b];
+
+    // Keep the pill above the whole AVKit view. It must stay tappable even when
+    // AVPlayerViewController's controls are visible.
+    UIView *host = self.view;
+    [host addSubview:b];
     self.qualityButton = b;
 
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    UILayoutGuide *safe = host.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [b.topAnchor constraintEqualToAnchor:safe.topAnchor constant:56],
+        [b.topAnchor constraintEqualToAnchor:safe.topAnchor constant:104],
         [b.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-16],
         [b.heightAnchor constraintEqualToConstant:32]
     ]];
@@ -157,7 +161,7 @@ static NSString *YumiEncode(NSString *s) {
     NSString *title = self.selectedQualityTitle.length ? self.selectedQualityTitle : @"Авто";
     [self.qualityButton setTitle:[title stringByAppendingString:@" ▾"]
                         forState:UIControlStateNormal];
-    [self.view bringSubviewToFront:self.qualityButton];
+    [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
 }
 
 - (void)qualityTapped {
@@ -422,7 +426,7 @@ static NSString *YumiEncode(NSString *s) {
     self.errorLabel.text = message.length ? message : @"Поток не открылся. Возможно, нужен Referer, другой UA или внешний плеер.";
     self.errorView.hidden = NO;
     [self.view bringSubviewToFront:self.errorView];
-    [self.view bringSubviewToFront:self.qualityButton];
+    [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
 }
 
 #pragma mark - Quality

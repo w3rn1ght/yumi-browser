@@ -3,6 +3,7 @@
 
 @interface YumiAnilibriaResolver : NSObject
 
++ (BOOL)isSupportedHost:(NSString *)host;
 + (BOOL)isItemURL:(NSURL *)url;
 
 /** JS-выражение, возвращающее shikimoriId текущей страницы. */

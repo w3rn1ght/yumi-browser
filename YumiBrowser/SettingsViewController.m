@@ -29,7 +29,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 2;   // версия сайта, UA
+        case 0: return 3;   // версия сайта, UA, поисковик
         case 1: return 2;   // перехват, авто-плеер
         case 2: return 1;   // реклама
         case 3: return 2;   // очистить данные, сброс
@@ -39,7 +39,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case 0: return @"Сайты";
+        case 0: return @"Сайты и поиск";
         case 1: return @"Плееры";
         case 2: return @"Реклама";
         case 3: return @"Данные";
@@ -50,7 +50,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
         case 0:
-            return @"Если сайт криво выглядит или падает — включи полную версию. Настройка «Версия сайта» задаёт режим по умолчанию, а в меню браузера её можно переключить для конкретного сайта.";
+            return @"Если сайт криво выглядит или падает — включи полную версию. Настройка «Версия сайта» задаёт режим по умолчанию, а в меню браузера её можно переключить для конкретного сайта. Поисковик используется, когда в адресной строке вводят запрос, а не адрес.";
         case 1:
             return @"Перехват находит m3u8/mp4, которые использует плеер сайта, и умеет открыть их в системном плеере с нужными Referer и cookies. Авто-режим сразу запускает первый найденный HLS.";
         case 2:
@@ -87,12 +87,15 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Версия сайта";
             cell.detailTextLabel.text = (s.uaMode == YumiUAModeDesktop) ? @"Полная" : @"Мобильная";
-        } else {
+        } else if (indexPath.row == 1) {
             cell.textLabel.text = @"User-Agent";
             NSString *ua = s.customUA ?: @"";
             cell.detailTextLabel.text = (s.uaMode == YumiUAModeCustom)
                 ? @"Своя строка"
                 : ([ua containsString:@"Macintosh"] ? @"macOS Safari" : @"iOS Safari 12");
+        } else {
+            cell.textLabel.text = @"Поисковик";
+            cell.detailTextLabel.text = [s searchEngineName];
         }
         return cell;
     }
@@ -160,6 +163,8 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         [self chooseUAMode];
     } else if (indexPath.section == 0 && indexPath.row == 1) {
         [self chooseUserAgent];
+    } else if (indexPath.section == 0 && indexPath.row == 2) {
+        [self chooseSearchEngine];
     } else if (indexPath.section == 3) {
         if (indexPath.row == 0) {
             [self.delegate settingsDidRequestClearData:self];
@@ -167,6 +172,41 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
             [self.delegate settingsDidRequestReset:self];
         }
     }
+}
+
+- (void)chooseSearchEngine {
+    YumiSettings *s = [self settings];
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Поисковик"
+                                                              message:@"Куда отправлять запросы из адресной строки"
+                                                       preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSString * (^title)(NSString *, YumiSearchEngine, NSString *) = ^NSString *(NSString *name, YumiSearchEngine engine, NSString *note) {
+        NSString *mark = (s.searchEngine == engine) ? @"✓ " : @"";
+        return [NSString stringWithFormat:@"%@%@ — %@", mark, name, note];
+    };
+
+    [a addAction:[UIAlertAction actionWithTitle:title(@"Яндекс", YumiSearchEngineYandex, @"по умолчанию")
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction *action) {
+        s.searchEngine = YumiSearchEngineYandex;
+        [self.tableView reloadData];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:title(@"Bing", YumiSearchEngineBing, @"быстрый, лёгкий")
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction *action) {
+        s.searchEngine = YumiSearchEngineBing;
+        [self.tableView reloadData];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:title(@"DuckDuckGo", YumiSearchEngineDuckDuckGo, @"без слежки")
+                                          style:UIAlertActionStyleDefault
+                                        handler:^(__unused UIAlertAction *action) {
+        s.searchEngine = YumiSearchEngineDuckDuckGo;
+        [self.tableView reloadData];
+    }]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
+    a.popoverPresentationController.sourceView = self.view;
+    a.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, 120, 1, 1);
+    [self presentViewController:a animated:YES completion:nil];
 }
 
 - (void)chooseUAMode {

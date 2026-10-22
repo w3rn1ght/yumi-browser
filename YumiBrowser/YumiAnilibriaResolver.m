@@ -23,11 +23,16 @@ static NSString *YumiJSQuotedString(NSString *string) {
 
 @implementation YumiAnilibriaResolver
 
++ (BOOL)isSupportedHost:(NSString *)host {
+    NSString *h = host.lowercaseString;
+    return [h hasSuffix:@"anilibria.fun"] ||
+           [h hasSuffix:@"anilibria.top"] ||
+           [h hasSuffix:@"anilibria.tv"];
+}
+
 + (BOOL)isItemURL:(NSURL *)url {
     NSString *host = url.host.lowercaseString;
-    if (![host hasSuffix:@"anilibria.fun"] &&
-        ![host hasSuffix:@"anilibria.top"] &&
-        ![host hasSuffix:@"anilibria.tv"]) return NO;
+    if (![self isSupportedHost:host]) return NO;
     NSString *path = url.path.lowercaseString;
     return [path hasPrefix:@"/anime/"] || [path hasPrefix:@"/release/"];
 }
