@@ -175,7 +175,7 @@ static NSString *YumiEncode(NSString *s) {
         [sheet addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction *a) {
-            [self selectQuality:nil auto:YES];
+            [self selectQuality:nil automatic:YES];
         }]];
     }
 
@@ -186,7 +186,7 @@ static NSString *YumiEncode(NSString *s) {
         [sheet addAction:[UIAlertAction actionWithTitle:(selected ? [@"✓ " stringByAppendingString:title] : title)
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(__unused UIAlertAction *a) {
-            [self selectQuality:option auto:NO];
+            [self selectQuality:option automatic:NO];
         }]];
     }
 
@@ -198,9 +198,9 @@ static NSString *YumiEncode(NSString *s) {
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)selectQuality:(NSDictionary *)option auto:(BOOL)auto {
-    NSString *title = auto ? @"Авто" : (option[@"title"] ?: @"");
-    NSURL *target = auto ? self.url : [NSURL URLWithString:option[@"url"] ?: @""];
+- (void)selectQuality:(NSDictionary *)option automatic:(BOOL)automatic {
+    NSString *title = automatic ? @"Авто" : (option[@"title"] ?: @"");
+    NSURL *target = automatic ? self.url : [NSURL URLWithString:option[@"url"] ?: @""];
     if (!target) return;
     if ([target.absoluteString isEqualToString:self.currentURL.absoluteString] &&
         [title isEqualToString:self.selectedQualityTitle ?: @""]) {
