@@ -213,6 +213,10 @@
     wide.priority = 750;
     wide.active = YES;
 
+    NSLayoutConstraint *maxWidth = [card.widthAnchor constraintEqualToConstant:520.0];
+    maxWidth.priority = 749;
+    maxWidth.active = YES;
+
     [self showLoading:YES];
 }
 

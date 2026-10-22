@@ -61,7 +61,7 @@ jobs:
             fi
           fi
           ls -la "$APP"
-          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.1.deb
+          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.2.deb
 
       - name: Make unsigned IPA
         run: |
@@ -77,6 +77,6 @@ jobs:
         with:
           name: Yumi-packages
           path: |
-            packages/Yumi-1.0.1.deb
+            packages/Yumi-1.0.2.deb
             build/Yumi-unsigned.ipa
           if-no-files-found: error

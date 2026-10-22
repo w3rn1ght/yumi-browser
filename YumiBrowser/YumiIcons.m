@@ -37,19 +37,34 @@
 }
 
 + (UIImage *)reload {
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(26, 26)];
-    UIImage *img = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-        NSDictionary *attrs = @{
-            NSFontAttributeName: [UIFont systemFontOfSize:21 weight:UIFontWeightRegular],
-            NSForegroundColorAttributeName: [UIColor blackColor]
-        };
-        NSString *glyph = @"↻";
-        CGSize textSize = [glyph sizeWithAttributes:attrs];
-        [glyph drawAtPoint:CGPointMake((26.0 - textSize.width) / 2.0,
-                                       (26.0 - textSize.height) / 2.0 + 0.5)
-            withAttributes:attrs];
+    return [self draw:^(CGContextRef c, CGSize s) {
+        CGFloat cx = 13.0, cy = 13.0, radius = 7.4;
+        CGFloat start = (CGFloat)(-M_PI * 0.30);
+        CGFloat end = (CGFloat)(M_PI * 1.36);
+        NSInteger steps = 48;
+
+        CGContextSetLineWidth(c, 2.2);
+        for (NSInteger i = 0; i <= steps; i++) {
+            CGFloat a = start + (end - start) * ((CGFloat)i / (CGFloat)steps);
+            CGFloat x = cx + radius * cosf(a);
+            CGFloat y = cy + radius * sinf(a);
+            if (i == 0) CGContextMoveToPoint(c, x, y);
+            else CGContextAddLineToPoint(c, x, y);
+        }
+        CGContextStrokePath(c);
+
+        // Стрелка на конце дуги.
+        CGFloat sx = cx + radius * cosf(start);
+        CGFloat sy = cy + radius * sinf(start);
+        CGFloat tx = -sinf(start), ty = cosf(start);
+        CGFloat px = -ty, py = tx;
+
+        CGContextMoveToPoint(c, sx + tx * 3.4, sy + ty * 3.4);
+        CGContextAddLineToPoint(c, sx + px * 3.0, sy + py * 3.0);
+        CGContextAddLineToPoint(c, sx - px * 3.0, sy - py * 3.0);
+        CGContextClosePath(c);
+        CGContextFillPath(c);
     }];
-    return [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 + (UIImage *)stop {

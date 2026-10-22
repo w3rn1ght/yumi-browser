@@ -25,7 +25,9 @@ static NSString *const kYumiSitesKey = @"YumiSites";
     NSData *data = [NSJSONSerialization dataWithJSONObject:sites options:0 error:nil];
     if (!data) return @"[]";
     NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    return json.length ? json : @"[]";
+    if (!json.length) return @"[]";
+    // Не даём имени сайта закрыть <script> в home.html.
+    return [json stringByReplacingOccurrencesOfString:@"</" withString:@"<\\/"];
 }
 
 + (NSString *)normalizedURLString:(NSString *)input {
