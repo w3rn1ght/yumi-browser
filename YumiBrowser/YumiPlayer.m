@@ -1,4 +1,4 @@
-﻿#import "YumiPlayer.h"
+#import "YumiPlayer.h"
 #import "YumiIcons.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
@@ -138,7 +138,7 @@ static NSString *YumiEncode(NSString *s) {
 
     UILabel *title = [[UILabel alloc] init];
     title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = @"РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃРїСЂРѕРёР·РІРµСЃС‚Рё";
+    title.text = @"Не удалось воспроизвести";
     title.textColor = [UIColor whiteColor];
     title.font = [UIFont boldSystemFontOfSize:17];
     title.textAlignment = NSTextAlignmentCenter;
@@ -154,8 +154,8 @@ static NSString *YumiEncode(NSString *s) {
     self.errorLabel = label;
 
     UIStackView *row1 = [[UIStackView alloc] initWithArrangedSubviews:@[
-        [self panelButtonWithTitle:@"РџРѕРІС‚РѕСЂРёС‚СЊ" action:@selector(retryTapped)],
-        [self panelButtonWithTitle:@"РљРѕРїРёСЂРѕРІР°С‚СЊ" action:@selector(copyTapped)]
+        [self panelButtonWithTitle:@"Повторить" action:@selector(retryTapped)],
+        [self panelButtonWithTitle:@"Копировать" action:@selector(copyTapped)]
     ]];
     row1.translatesAutoresizingMaskIntoConstraints = NO;
     row1.axis = UILayoutConstraintAxisHorizontal;
@@ -183,8 +183,8 @@ static NSString *YumiEncode(NSString *s) {
     UILabel *hint = [[UILabel alloc] init];
     hint.translatesAutoresizingMaskIntoConstraints = NO;
     hint.text = extButtons.count
-        ? @"Р•СЃР»Рё РЅРµ РёРіСЂР°РµС‚ вЂ” РѕС‚РєСЂРѕР№ РІРѕ РІРЅРµС€РЅРµРј РїР»РµРµСЂРµ."
-        : @"РџРѕСЃС‚Р°РІСЊ VLC РёР»Рё nPlayer РёР· Cydia, С‡С‚РѕР±С‹ РѕС‚РєСЂС‹РІР°С‚СЊ С‚Р°РєРёРµ РїРѕС‚РѕРєРё РІРЅРµС€РЅРµ.";
+        ? @"Если не играет — открой во внешнем плеере."
+        : @"Поставь VLC или nPlayer из Cydia, чтобы открывать такие потоки внешне.";
     hint.textColor = [UIColor colorWithWhite:0.62 alpha:1.0];
     hint.font = [UIFont systemFontOfSize:11.5];
     hint.textAlignment = NSTextAlignmentCenter;
@@ -279,7 +279,7 @@ static NSString *YumiEncode(NSString *s) {
 }
 
 - (void)showError:(NSString *)message {
-    self.errorLabel.text = message.length ? message : @"РџРѕС‚РѕРє РЅРµ РѕС‚РєСЂС‹Р»СЃСЏ. Р’РѕР·РјРѕР¶РЅРѕ, РЅСѓР¶РµРЅ Referer, РґСЂСѓРіРѕР№ UA РёР»Рё РІРЅРµС€РЅРёР№ РїР»РµРµСЂ.";
+    self.errorLabel.text = message.length ? message : @"Поток не открылся. Возможно, нужен Referer, другой UA или внешний плеер.";
     self.errorView.hidden = NO;
     [self.view bringSubviewToFront:self.errorView];
     [self.view bringSubviewToFront:self.closeButton];
@@ -304,10 +304,10 @@ static NSString *YumiEncode(NSString *s) {
 
 - (void)copyTapped {
     [UIPasteboard generalPasteboard].string = self.url.absoluteString ?: @"";
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"РЎСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°"
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Ссылка скопирована"
                                                               message:nil
                                                        preferredStyle:UIAlertControllerStyleAlert];
-    [a addAction:[UIAlertAction actionWithTitle:@"РћРє" style:UIAlertActionStyleDefault handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Ок" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 
@@ -328,7 +328,7 @@ static NSString *YumiEncode(NSString *s) {
 #pragma mark - AVPlayerViewControllerDelegate
 
 - (void)playerViewControllerDidStopPictureInPicture:(AVPlayerViewController *)playerViewController {
-    // РЅРёС‡РµРіРѕ: РѕСЃС‚Р°С‘РјСЃСЏ РІ РїР»РµРµСЂРµ
+    // ничего: остаёмся в плеере
 }
 
 @end

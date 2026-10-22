@@ -104,7 +104,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     field.borderStyle = UITextBorderStyleRoundedRect;
     field.backgroundColor = [UIColor colorWithWhite:0.94 alpha:1.0];
     field.font = [UIFont systemFontOfSize:15];
-    field.placeholder = @"РџРѕРёСЃРє РёР»Рё Р°РґСЂРµСЃ";
+    field.placeholder = @"Поиск или адрес";
     field.keyboardType = UIKeyboardTypeURL;
     field.returnKeyType = UIReturnKeyGo;
     field.autocapitalizationType = UITextAutocapitalizationTypeNone;
@@ -127,14 +127,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)setupBarButtons {
-    self.reloadItem = [self itemWithImage:[YumiIcons reload] action:@selector(reloadTapped) label:@"РћР±РЅРѕРІРёС‚СЊ"];
-    self.menuItem = [self itemWithImage:[YumiIcons ellipsis] action:@selector(menuTapped) label:@"РњРµРЅСЋ"];
+    self.reloadItem = [self itemWithImage:[YumiIcons reload] action:@selector(reloadTapped) label:@"Обновить"];
+    self.menuItem = [self itemWithImage:[YumiIcons ellipsis] action:@selector(menuTapped) label:@"Меню"];
     self.navigationItem.rightBarButtonItems = @[self.menuItem, self.reloadItem];
 
-    self.backItem = [self itemWithImage:[YumiIcons chevronLeft] action:@selector(goBackTapped) label:@"РќР°Р·Р°Рґ"];
-    self.forwardItem = [self itemWithImage:[YumiIcons chevronRight] action:@selector(goForwardTapped) label:@"Р’РїРµСЂС‘Рґ"];
-    self.tabsItem = [self itemWithImage:[YumiIcons tabs] action:@selector(showTabs) label:@"Р’РєР»Р°РґРєРё"];
-    self.homeItem = [self itemWithImage:[YumiIcons home] action:@selector(goHomeTapped) label:@"РќР°С‡Р°Р»Рѕ"];
+    self.backItem = [self itemWithImage:[YumiIcons chevronLeft] action:@selector(goBackTapped) label:@"Назад"];
+    self.forwardItem = [self itemWithImage:[YumiIcons chevronRight] action:@selector(goForwardTapped) label:@"Вперёд"];
+    self.tabsItem = [self itemWithImage:[YumiIcons tabs] action:@selector(showTabs) label:@"Вкладки"];
+    self.homeItem = [self itemWithImage:[YumiIcons home] action:@selector(goHomeTapped) label:@"Начало"];
 
     UIBarButtonItem *(^flex)(void) = ^{
         return [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
@@ -191,7 +191,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.textColor = [UIColor whiteColor];
     label.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    label.text = @"РџРѕС‚РѕРє РЅР°Р№РґРµРЅ";
+    label.text = @"Поток найден";
     [banner addSubview:label];
     self.streamLabel = label;
 
@@ -199,7 +199,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     sub.translatesAutoresizingMaskIntoConstraints = NO;
     sub.textColor = [UIColor colorWithWhite:0.72 alpha:1.0];
     sub.font = [UIFont systemFontOfSize:11.5];
-    sub.text = @"РќР°Р¶РјРё, С‡С‚РѕР±С‹ РѕС‚РєСЂС‹С‚СЊ РІ СЃРёСЃС‚РµРјРЅРѕРј РїР»РµРµСЂРµ";
+    sub.text = @"Нажми, чтобы открыть в системном плеере";
     [banner addSubview:sub];
     self.streamSubLabel = sub;
 
@@ -241,7 +241,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     ]];
 }
 
-#pragma mark - Р‘Р°РЅРЅРµСЂ РїРѕС‚РѕРєР°
+#pragma mark - Баннер потока
 
 - (void)showStreamBannerWithInfo:(NSDictionary *)info {
     self.streamInfo = info;
@@ -251,10 +251,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSString *host = url.host ?: @"";
     NSString *title = info[@"title"];
     if ([title isKindOfClass:[NSString class]] && title.length > 48) {
-        title = [[title substringToIndex:48] stringByAppendingString:@"вЂ¦"];
+        title = [[title substringToIndex:48] stringByAppendingString:@"…"];
     }
-    self.streamLabel.text = title.length ? title : @"РџРѕС‚РѕРє РЅР°Р№РґРµРЅ";
-    self.streamSubLabel.text = [NSString stringWithFormat:@"%@ В· %@", kind, host];
+    self.streamLabel.text = title.length ? title : @"Поток найден";
+    self.streamSubLabel.text = [NSString stringWithFormat:@"%@ · %@", kind, host];
 
     self.streamBanner.hidden = NO;
     self.streamBanner.transform = CGAffineTransformMakeTranslation(0, 14);
@@ -287,7 +287,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     return YES;
 }
 
-#pragma mark - Р РµР¶РёРјС‹
+#pragma mark - Режимы
 
 - (YumiTab *)activeTab {
     if (self.activeIndex < 0 || self.activeIndex >= (NSInteger)self.tabs.count) {
@@ -301,14 +301,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     self.backItem.enabled = tab.canGoBack;
     self.forwardItem.enabled = tab.canGoForward;
     self.reloadItem.image = tab.isLoading ? [YumiIcons stop] : [YumiIcons reload];
-    self.reloadItem.accessibilityLabel = tab.isLoading ? @"РћСЃС‚Р°РЅРѕРІРёС‚СЊ" : @"РћР±РЅРѕРІРёС‚СЊ";
-    self.tabsItem.accessibilityLabel = [NSString stringWithFormat:@"Р’РєР»Р°РґРєРё: %lu", (unsigned long)self.tabs.count];
+    self.reloadItem.accessibilityLabel = tab.isLoading ? @"Остановить" : @"Обновить";
+    self.tabsItem.accessibilityLabel = [NSString stringWithFormat:@"Вкладки: %lu", (unsigned long)self.tabs.count];
     if (!self.addressField.isFirstResponder) {
         self.addressField.text = tab.displayURLString ?: @"";
     }
 }
 
-#pragma mark - Р’РєР»Р°РґРєРё
+#pragma mark - Вкладки
 
 - (YumiTab *)createTab {
     return [[YumiTab alloc] initWithConfiguration:nil delegate:self];
@@ -422,7 +422,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self addHomeTab];
 }
 
-#pragma mark - РќР°РІРёРіР°С†РёСЏ
+#pragma mark - Навигация
 
 - (void)goBackTapped { [self.activeTab goBack]; [self updateChrome]; }
 - (void)goForwardTapped { [self.activeTab goForward]; [self updateChrome]; }
@@ -498,7 +498,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self updateChrome];
 }
 
-#pragma mark - РњРµРЅСЋ
+#pragma mark - Меню
 
 - (void)menuTapped {
     YumiTab *tab = self.activeTab;
@@ -509,35 +509,35 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РќРѕРІР°СЏ РІРєР»Р°РґРєР°"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Новая вкладка"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self addHomeTab]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Р’РєР»Р°РґРєРё (%lu)", (unsigned long)self.tabs.count]
+    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Вкладки (%lu)", (unsigned long)self.tabs.count]
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showTabs]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РћР±РЅРѕРІРёС‚СЊ"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Обновить"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self reloadTapped]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:(desktop ? @"РњРѕР±РёР»СЊРЅР°СЏ РІРµСЂСЃРёСЏ СЃР°Р№С‚Р°" : @"РџРѕР»РЅР°СЏ РІРµСЂСЃРёСЏ СЃР°Р№С‚Р°")
+    [sheet addAction:[UIAlertAction actionWithTitle:(desktop ? @"Мобильная версия сайта" : @"Полная версия сайта")
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self toggleDesktop]; }]];
 
     if (self.streams.count) {
-        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"РџРѕС‚РѕРєРё (%lu)", (unsigned long)self.streams.count]
+        [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Потоки (%lu)", (unsigned long)self.streams.count]
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *a) { [self showStreamsList]; }]];
     }
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РџРѕРґРµР»РёС‚СЊСЃСЏ СЃСЃС‹Р»РєРѕР№"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Поделиться ссылкой"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self shareTapped]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РћС‚РєСЂС‹С‚СЊ РІ Safari"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Открыть в Safari"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self openInSafari]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РќР°СЃС‚СЂРѕР№РєРё"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Настройки"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showSettings]; }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
 
     sheet.popoverPresentationController.barButtonItem = self.menuItem;
     [self presentViewController:sheet animated:YES completion:nil];
@@ -547,20 +547,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     YumiTab *tab = self.activeTab;
     NSString *host = tab.webView.URL.host ?: tab.url.host;
     if (!host.length) {
-        [self showToast:@"РЎРЅР°С‡Р°Р»Р° РѕС‚РєСЂРѕР№ СЃР°Р№С‚"];
+        [self showToast:@"Сначала открой сайт"];
         return;
     }
     BOOL desktop = [[YumiSettings shared] isDesktopForHost:host];
     [[YumiSettings shared] setDesktop:!desktop forHost:host];
     [tab applyUserAgent];
     [tab reload];
-    [self showToast:desktop ? @"РњРѕР±РёР»СЊРЅР°СЏ РІРµСЂСЃРёСЏ" : @"РџРѕР»РЅР°СЏ РІРµСЂСЃРёСЏ"];
+    [self showToast:desktop ? @"Мобильная версия" : @"Полная версия"];
 }
 
 - (void)shareTapped {
     NSURL *url = self.activeTab.url ?: [NSURL URLWithString:self.activeTab.displayURLString];
     if (!url) {
-        [self showToast:@"РќРµС‡РµРіРѕ РѕС‚РїСЂР°РІРёС‚СЊ"];
+        [self showToast:@"Нечего отправить"];
         return;
     }
     UIActivityViewController *activity = [[UIActivityViewController alloc] initWithActivityItems:@[url]
@@ -583,14 +583,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self presentController:nav];
 }
 
-#pragma mark - РџРѕС‚РѕРєРё
+#pragma mark - Потоки
 
 - (void)showStreamsList {
     if (!self.streams.count) {
-        [self showToast:@"РџРѕС‚РѕРєРё РїРѕРєР° РЅРµ РЅР°Р№РґРµРЅС‹"];
+        [self showToast:@"Потоки пока не найдены"];
         return;
     }
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"РќР°Р№РґРµРЅРЅС‹Рµ РїРѕС‚РѕРєРё"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Найденные потоки"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
     NSInteger max = MIN(8, (NSInteger)self.streams.count);
@@ -598,20 +598,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         NSDictionary *info = self.streams[(NSUInteger)i];
         NSURL *url = [NSURL URLWithString:info[@"url"]];
         NSString *kind = [info[@"kind"] isKindOfClass:[NSString class]] ? [info[@"kind"] uppercaseString] : @"?";
-        NSString *title = [NSString stringWithFormat:@"%@ В· %@", kind, url.host ?: @"СЃСЃС‹Р»РєР°"];
+        NSString *title = [NSString stringWithFormat:@"%@ · %@", kind, url.host ?: @"ссылка"];
         [sheet addAction:[UIAlertAction actionWithTitle:title
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *a) {
             [self playStreamInfo:info];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РћС‡РёСЃС‚РёС‚СЊ СЃРїРёСЃРѕРє"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Очистить список"
                                              style:UIAlertActionStyleDestructive
                                            handler:^(__unused UIAlertAction *a) {
         [self.streams removeAllObjects];
         [self hideStreamBanner];
     }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
     sheet.popoverPresentationController.sourceView = self.view;
     sheet.popoverPresentationController.sourceRect =
         CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height - 60, 1, 1);
@@ -671,7 +671,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self presentController:player];
 }
 
-#pragma mark - РќР°СЃС‚СЂРѕР№РєРё
+#pragma mark - Настройки
 
 - (void)applySettingsToTabs {
     YumiSettings *settings = [YumiSettings shared];
@@ -729,11 +729,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)confirmClearData {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"РћС‡РёСЃС‚РёС‚СЊ РґР°РЅРЅС‹Рµ?"
-                                                                  message:@"РљСѓРєРё, РєСЌС€ Рё localStorage Р±СѓРґСѓС‚ СѓРґР°Р»РµРЅС‹. Р›РѕРіРёРЅ РЅР° СЃР°Р№С‚Р°С… СЃР»РµС‚РёС‚."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Очистить данные?"
+                                                                  message:@"Куки, кэш и localStorage будут удалены. Логин на сайтах слетит."
                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћС‡РёСЃС‚РёС‚СЊ" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *a) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Очистить" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *a) {
         [self clearWebsiteData];
     }]];
     [self presentController:alert];
@@ -748,17 +748,17 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         [[NSURLCache sharedURLCache] removeAllCachedResponses];
         dispatch_async(dispatch_get_main_queue(), ^{
             for (YumiTab *tab in weakSelf.tabs) [tab reload];
-            [weakSelf showToast:@"Р”Р°РЅРЅС‹Рµ РѕС‡РёС‰РµРЅС‹"];
+            [weakSelf showToast:@"Данные очищены"];
         });
     }];
 }
 
 - (void)confirmReset {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"РЎР±СЂРѕСЃРёС‚СЊ РЅР°СЃС‚СЂРѕР№РєРё?"
-                                                                  message:@"Р’РµСЂРЅСѓС‚СЃСЏ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Рµ UA, Р±Р»РѕРєРёСЂРѕРІРєР° СЂРµРєР»Р°РјС‹ Рё РїРµСЂРµС…РІР°С‚ РїРѕС‚РѕРєРѕРІ. Р’РєР»Р°РґРєРё Р·Р°РєСЂРѕСЋС‚СЃСЏ."
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Сбросить настройки?"
+                                                                  message:@"Вернутся стандартные UA, блокировка рекламы и перехват потоков. Вкладки закроются."
                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РЎР±СЂРѕСЃРёС‚СЊ" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *a) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Сбросить" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *a) {
         [self resetEverything];
     }]];
     [self presentController:alert];
@@ -776,10 +776,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     self.activeIndex = 0;
     [self applySettingsToTabs];
     [self addHomeTab];
-    [self showToast:@"РќР°СЃС‚СЂРѕР№РєРё СЃР±СЂРѕС€РµРЅС‹"];
+    [self showToast:@"Настройки сброшены"];
 }
 
-#pragma mark - РЎРµСЃСЃРёСЏ
+#pragma mark - Сессия
 
 - (void)saveSession {
     NSMutableArray *urls = [NSMutableArray array];
@@ -822,7 +822,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }
 }
 
-#pragma mark - РњРѕСЃС‚ РёР· JS
+#pragma mark - Мост из JS
 
 #pragma mark - YummyAnime
 
@@ -1001,15 +1001,15 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     if (error.code == NSURLErrorCancelled || error.code == 102) return;
     if ([self.presentedViewController isKindOfClass:[YumiPlayerViewController class]]) return;
 
-    NSString *message = error.localizedDescription ?: @"РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ";
+    NSString *message = error.localizedDescription ?: @"Не удалось загрузить страницу";
     __weak typeof(self) weakSelf = self;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Ошибка загрузки"
                                                                   message:message
                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћР±РЅРѕРІРёС‚СЊ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Обновить" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         [weakSelf.activeTab reload];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћРє" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Ок" style:UIAlertActionStyleCancel handler:nil]];
     [self presentController:alert];
 }
 
@@ -1052,7 +1052,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     if ([[UIApplication sharedApplication] canOpenURL:url]) {
         [[UIApplication sharedApplication] openURL:url];
     } else {
-        [self showToast:@"РќРµС‚ РїСЂРёР»РѕР¶РµРЅРёСЏ РґР»СЏ СЌС‚РѕР№ СЃСЃС‹Р»РєРё"];
+        [self showToast:@"Нет приложения для этой ссылки"];
     }
 }
 
@@ -1091,7 +1091,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                   message:message
                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћРє" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Ок" style:UIAlertActionStyleDefault handler:nil]];
     [self presentController:alert];
 }
 
@@ -1102,16 +1102,16 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                   message:message
                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *a) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *a) {
         if (completion) completion(NO);
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"РћРє" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Ок" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *a) {
         if (completion) completion(YES);
     }]];
     [self presentController:alert];
 }
 
-#pragma mark - Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅРѕРµ
+#pragma mark - Вспомогательное
 
 - (void)presentController:(UIViewController *)controller {
     dispatch_async(dispatch_get_main_queue(), ^{

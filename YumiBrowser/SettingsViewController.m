@@ -1,4 +1,4 @@
-﻿#import "SettingsViewController.h"
+#import "SettingsViewController.h"
 #import "YumiSettings.h"
 
 typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
@@ -11,7 +11,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"РќР°СЃС‚СЂРѕР№РєРё";
+    self.title = @"Настройки";
     self.navigationItem.rightBarButtonItem =
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                                                       target:self
@@ -29,32 +29,32 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 2;   // РІРµСЂСЃРёСЏ СЃР°Р№С‚Р°, UA
-        case 1: return 2;   // РїРµСЂРµС…РІР°С‚, Р°РІС‚Рѕ-РїР»РµРµСЂ
-        case 2: return 1;   // СЂРµРєР»Р°РјР°
-        case 3: return 2;   // РѕС‡РёСЃС‚РёС‚СЊ РґР°РЅРЅС‹Рµ, СЃР±СЂРѕСЃ
-        default: return 3;  // Рѕ РїСЂРёР»РѕР¶РµРЅРёРё
+        case 0: return 2;   // версия сайта, UA
+        case 1: return 2;   // перехват, авто-плеер
+        case 2: return 1;   // реклама
+        case 3: return 2;   // очистить данные, сброс
+        default: return 3;  // о приложении
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case 0: return @"РЎР°Р№С‚С‹";
-        case 1: return @"РџР»РµРµСЂС‹";
-        case 2: return @"Р РµРєР»Р°РјР°";
-        case 3: return @"Р”Р°РЅРЅС‹Рµ";
-        default: return @"Рћ РїСЂРёР»РѕР¶РµРЅРёРё";
+        case 0: return @"Сайты";
+        case 1: return @"Плееры";
+        case 2: return @"Реклама";
+        case 3: return @"Данные";
+        default: return @"О приложении";
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
         case 0:
-            return @"Р•СЃР»Рё СЃР°Р№С‚ РєСЂРёРІРѕ РІС‹РіР»СЏРґРёС‚ РёР»Рё РїР°РґР°РµС‚ вЂ” РІРєР»СЋС‡Рё РїРѕР»РЅСѓСЋ РІРµСЂСЃРёСЋ. РќР°СЃС‚СЂРѕР№РєР° В«Р’РµСЂСЃРёСЏ СЃР°Р№С‚Р°В» Р·Р°РґР°С‘С‚ СЂРµР¶РёРј РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, Р° РІ РјРµРЅСЋ Р±СЂР°СѓР·РµСЂР° РµС‘ РјРѕР¶РЅРѕ РїРµСЂРµРєР»СЋС‡РёС‚СЊ РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ СЃР°Р№С‚Р°.";
+            return @"Если сайт криво выглядит или падает — включи полную версию. Настройка «Версия сайта» задаёт режим по умолчанию, а в меню браузера её можно переключить для конкретного сайта.";
         case 1:
-            return @"РџРµСЂРµС…РІР°С‚ РЅР°С…РѕРґРёС‚ m3u8/mp4, РєРѕС‚РѕСЂС‹Рµ РёСЃРїРѕР»СЊР·СѓРµС‚ РїР»РµРµСЂ СЃР°Р№С‚Р°, Рё СѓРјРµРµС‚ РѕС‚РєСЂС‹С‚СЊ РёС… РІ СЃРёСЃС‚РµРјРЅРѕРј РїР»РµРµСЂРµ СЃ РЅСѓР¶РЅС‹РјРё Referer Рё cookies. РђРІС‚Рѕ-СЂРµР¶РёРј СЃСЂР°Р·Сѓ Р·Р°РїСѓСЃРєР°РµС‚ РїРµСЂРІС‹Р№ РЅР°Р№РґРµРЅРЅС‹Р№ HLS.";
+            return @"Перехват находит m3u8/mp4, которые использует плеер сайта, и умеет открыть их в системном плеере с нужными Referer и cookies. Авто-режим сразу запускает первый найденный HLS.";
         case 2:
-            return @"Р‘Р»РѕРєРёСЂРѕРІРєР° СЂР°Р±РѕС‚Р°РµС‚ РЅР° СѓСЂРѕРІРЅРµ WebKit (РїСЂР°РІРёР»Р° + РєРѕСЃРјРµС‚РёРєР°). Р•СЃР»Рё СЃР°Р№С‚ СЃР»РѕРјР°Р»СЃСЏ вЂ” РІС‹РєР»СЋС‡Рё Рё РїРµСЂРµР·Р°РіСЂСѓР·Рё СЃС‚СЂР°РЅРёС†Сѓ.";
+            return @"Блокировка работает на уровне WebKit (правила + косметика). Если сайт сломался — выключи и перезагрузи страницу.";
         default:
             return nil;
     }
@@ -85,13 +85,13 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         UITableViewCell *cell = [self cellWithStyle:UITableViewCellStyleValue1];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"Р’РµСЂСЃРёСЏ СЃР°Р№С‚Р°";
-            cell.detailTextLabel.text = (s.uaMode == YumiUAModeDesktop) ? @"РџРѕР»РЅР°СЏ" : @"РњРѕР±РёР»СЊРЅР°СЏ";
+            cell.textLabel.text = @"Версия сайта";
+            cell.detailTextLabel.text = (s.uaMode == YumiUAModeDesktop) ? @"Полная" : @"Мобильная";
         } else {
             cell.textLabel.text = @"User-Agent";
             NSString *ua = s.customUA ?: @"";
             cell.detailTextLabel.text = (s.uaMode == YumiUAModeCustom)
-                ? @"РЎРІРѕСЏ СЃС‚СЂРѕРєР°"
+                ? @"Своя строка"
                 : ([ua containsString:@"Macintosh"] ? @"macOS Safari" : @"iOS Safari 12");
         }
         return cell;
@@ -99,17 +99,17 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
     if (indexPath.section == 1) {
         if (indexPath.row == 0) {
-            return [self switchCellWithTitle:@"РџРµСЂРµС…РІР°С‚С‹РІР°С‚СЊ РїРѕС‚РѕРєРё"
+            return [self switchCellWithTitle:@"Перехватывать потоки"
                                          tag:YumiSettingsSwitchMediaHook
                                           on:s.mediaHookEnabled];
         }
-        return [self switchCellWithTitle:@"РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРё РёРіСЂР°С‚СЊ HLS"
+        return [self switchCellWithTitle:@"Автоматически играть HLS"
                                      tag:YumiSettingsSwitchAutoPlayer
                                       on:s.autoNativePlayer];
     }
 
     if (indexPath.section == 2) {
-        return [self switchCellWithTitle:@"Р‘Р»РѕРєРёСЂРѕРІР°С‚СЊ СЂРµРєР»Р°РјСѓ"
+        return [self switchCellWithTitle:@"Блокировать рекламу"
                                      tag:YumiSettingsSwitchAdblock
                                       on:s.adblockEnabled];
     }
@@ -117,10 +117,10 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     if (indexPath.section == 3) {
         UITableViewCell *cell = [self cellWithStyle:UITableViewCellStyleDefault];
         if (indexPath.row == 0) {
-            cell.textLabel.text = @"РћС‡РёСЃС‚РёС‚СЊ РєСЌС€ Рё cookies";
+            cell.textLabel.text = @"Очистить кэш и cookies";
             cell.textLabel.textColor = [UIColor colorWithRed:0.85 green:0.22 blue:0.18 alpha:1];
         } else {
-            cell.textLabel.text = @"РЎР±СЂРѕСЃРёС‚СЊ РІСЃРµ РЅР°СЃС‚СЂРѕР№РєРё";
+            cell.textLabel.text = @"Сбросить все настройки";
             cell.textLabel.textColor = [UIColor colorWithRed:0.85 green:0.22 blue:0.18 alpha:1];
         }
         return cell;
@@ -131,13 +131,13 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     if (indexPath.row == 0) {
         cell.textLabel.text = @"Yumi Browser";
         NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.0";
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"Р’РµСЂСЃРёСЏ %@ В· iOS 12+", version];
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"Версия %@ · iOS 12+", version];
     } else if (indexPath.row == 1) {
-        cell.textLabel.text = @"РџР»РµРµСЂС‹";
-        cell.detailTextLabel.text = @"HLS/mp4 вЂ” РЅР°С‚РёРІРЅРѕ, СЃ Referer Рё cookies";
+        cell.textLabel.text = @"Плееры";
+        cell.detailTextLabel.text = @"HLS/mp4 — нативно, с Referer и cookies";
     } else {
-        cell.textLabel.text = @"РљРёРЅРѕРїРѕРёСЃРє";
-        cell.detailTextLabel.text = @"РџР»Р°С‚РЅС‹Р№ РєРѕРЅС‚РµРЅС‚ Р·Р°С‰РёС‰С‘РЅ DRM Рё РЅРµ РёРіСЂР°РµС‚ РЅР° iOS 12";
+        cell.textLabel.text = @"Кинопоиск";
+        cell.detailTextLabel.text = @"Платный контент защищён DRM и не играет на iOS 12";
         cell.detailTextLabel.numberOfLines = 2;
     }
     return cell;
@@ -171,24 +171,24 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (void)chooseUAMode {
     YumiSettings *s = [self settings];
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Р’РµСЂСЃРёСЏ СЃР°Р№С‚Р°"
-                                                              message:@"Р РµР¶РёРј РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РґР»СЏ РЅРѕРІС‹С… СЃР°Р№С‚РѕРІ"
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Версия сайта"
+                                                              message:@"Режим по умолчанию для новых сайтов"
                                                        preferredStyle:UIAlertControllerStyleActionSheet];
-    [a addAction:[UIAlertAction actionWithTitle:@"РњРѕР±РёР»СЊРЅР°СЏ (Safari iOS 12)"
+    [a addAction:[UIAlertAction actionWithTitle:@"Мобильная (Safari iOS 12)"
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction *action) {
         s.uaMode = YumiUAModeMobile;
         [self.tableView reloadData];
         [self.delegate settingsDidChange:self];
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"РџРѕР»РЅР°СЏ (Safari macOS)"
+    [a addAction:[UIAlertAction actionWithTitle:@"Полная (Safari macOS)"
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction *action) {
         s.uaMode = YumiUAModeDesktop;
         [self.tableView reloadData];
         [self.delegate settingsDidChange:self];
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
     a.popoverPresentationController.sourceView = self.view;
     a.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, 120, 1, 1);
     [self presentViewController:a animated:YES completion:nil];
@@ -199,7 +199,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"User-Agent"
                                                               message:nil
                                                        preferredStyle:UIAlertControllerStyleActionSheet];
-    [a addAction:[UIAlertAction actionWithTitle:@"iOS Safari 12 (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)"
+    [a addAction:[UIAlertAction actionWithTitle:@"iOS Safari 12 (по умолчанию)"
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction *action) {
         s.uaMode = YumiUAModeMobile;
@@ -213,12 +213,12 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         [self.tableView reloadData];
         [self.delegate settingsDidChange:self];
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"РЎРІРѕСЏ СЃС‚СЂРѕРєР°вЂ¦"
+    [a addAction:[UIAlertAction actionWithTitle:@"Своя строка…"
                                           style:UIAlertActionStyleDefault
                                         handler:^(__unused UIAlertAction *action) {
         [self editCustomUA];
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
     a.popoverPresentationController.sourceView = self.view;
     a.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, 120, 1, 1);
     [self presentViewController:a animated:YES completion:nil];
@@ -226,17 +226,17 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 
 - (void)editCustomUA {
     YumiSettings *s = [self settings];
-    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"РЎРІРѕР№ User-Agent"
-                                                              message:@"РџСѓСЃС‚Р°СЏ СЃС‚СЂРѕРєР° РІРµСЂРЅС‘С‚ СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№"
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Свой User-Agent"
+                                                              message:@"Пустая строка вернёт стандартный"
                                                        preferredStyle:UIAlertControllerStyleAlert];
     [a addTextFieldWithConfigurationHandler:^(UITextField *field) {
         field.text = s.customUA;
         field.autocapitalizationType = UITextAutocapitalizationTypeNone;
         field.autocorrectionType = UITextAutocorrectionTypeNo;
     }];
-    [a addAction:[UIAlertAction actionWithTitle:@"РЎРѕС…СЂР°РЅРёС‚СЊ" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [a addAction:[UIAlertAction actionWithTitle:@"Сохранить" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         NSString *text = a.textFields.firstObject.text ?: @"";
-        // РЅРµ РґР°С‘Рј СЃР°РјРѕРјСѓ СЃРµР±Рµ РїРµСЂРµР·Р°РїРёСЃР°С‚СЊ customUA РґРµС„РѕР»С‚РѕРј
+        // не даём самому себе перезаписать customUA дефолтом
         if (text.length) {
             [[NSUserDefaults standardUserDefaults] setObject:text forKey:@"YumiCustomUA"];
             s.uaMode = YumiUAModeCustom;
@@ -246,7 +246,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         [self.tableView reloadData];
         [self.delegate settingsDidChange:self];
     }]];
-    [a addAction:[UIAlertAction actionWithTitle:@"РћС‚РјРµРЅР°" style:UIAlertActionStyleCancel handler:nil]];
+    [a addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
 }
 

@@ -1,4 +1,4 @@
-﻿#import "YumiTab.h"
+#import "YumiTab.h"
 #import "YumiSettings.h"
 #import "YumiScripts.h"
 #import "YumiBridge.h"
@@ -89,7 +89,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
                              delegate:(id<YumiTabDelegate>)delegate {
     if ((self = [super init])) {
         _delegate = delegate;
-        _title = @"РќРѕРІР°СЏ РІРєР»Р°РґРєР°";
+        _title = @"Новая вкладка";
         WKWebViewConfiguration *cfg = configuration ?: [[self class] defaultConfiguration];
         _webView = [[WKWebView alloc] initWithFrame:CGRectMake(0, 0, 320, 480) configuration:cfg];
         _webView.navigationDelegate = self;
@@ -129,7 +129,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
         [self.delegate tab:self didUpdateProgress:self.webView.estimatedProgress];
     } else if ([keyPath isEqualToString:@"title"]) {
         NSString *t = self.webView.title;
-        if (!t.length) t = self.webView.URL.host ?: @"РќРѕРІР°СЏ РІРєР»Р°РґРєР°";
+        if (!t.length) t = self.webView.URL.host ?: @"Новая вкладка";
         self.title = t;
         [self.delegate tab:self didUpdateTitle:t];
     } else if ([keyPath isEqualToString:@"URL"]) {
@@ -141,7 +141,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     }
 }
 
-#pragma mark - Р—Р°РіСЂСѓР·РєР°
+#pragma mark - Загрузка
 
 - (void)applyUserAgent {
     NSString *host = self.webView.URL.host ?: self.url.host;
@@ -322,7 +322,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     [webView reload];
 }
 
-#pragma mark - РЎС‚СЂРёРјС‹
+#pragma mark - Стримы
 
 - (void)reportStreamURL:(NSURL *)url kind:(NSString *)kind {
     if (!url || !url.absoluteString.length) return;
@@ -378,7 +378,7 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
 }
 
 - (void)webViewDidClose:(WKWebView *)webView {
-    // РѕРєРЅРѕ, РѕС‚РєСЂС‹С‚РѕРµ С‡РµСЂРµР· window.close(), РїСЂРѕСЃС‚Рѕ РѕСЃС‚Р°С‘С‚СЃСЏ; Р·Р°РєСЂС‹С‚РёРµ РІРєР»Р°РґРєРё РґРµР»Р°РµС‚ Р±СЂР°СѓР·РµСЂ
+    // окно, открытое через window.close(), просто остаётся; закрытие вкладки делает браузер
 }
 
 @end
