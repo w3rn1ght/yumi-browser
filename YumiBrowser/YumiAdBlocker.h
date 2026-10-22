@@ -9,6 +9,7 @@
 - (void)prepareWithCompletion:(void (^)(void))completion;
 
 @property (nonatomic, strong, readonly) WKContentRuleList *ruleList;
+@property (nonatomic, strong, readonly) WKContentRuleList *anilibriaRuleList;
 
 + (BOOL)isAdHost:(NSString *)host;
 + (NSArray<NSString *> *)adHosts;

@@ -57,6 +57,8 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
         WKContentRuleList *rules = [YumiAdBlocker shared].ruleList;
         if (rules) [ucc addContentRuleList:rules];
     }
+    WKContentRuleList *anilibriaRules = [YumiAdBlocker shared].anilibriaRuleList;
+    if (anilibriaRules) [ucc addContentRuleList:anilibriaRules];
 
     cfg.userContentController = ucc;
     cfg.websiteDataStore = [WKWebsiteDataStore defaultDataStore];

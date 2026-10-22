@@ -266,7 +266,8 @@ static NSString *YumiJSQuotedString(NSString *string) {
             return;
         }
 
-        NSURL *url = [NSURL URLWithString:options.firstObject[@"url"]];
+        NSDictionary *first = options.firstObject;
+        NSURL *url = [NSURL URLWithString:first[@"url"]];
         NSDictionary *headers = @{ @"Referer": @"https://anilibria.fun/" };
         NSString *title = dubbing.length
             ? [NSString stringWithFormat:@"%@ · серия %@", dubbing, episode]

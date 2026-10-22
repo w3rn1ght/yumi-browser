@@ -4,6 +4,7 @@ static NSString *const kYumiRuleID = @"yumi-ads-v2";
 
 @interface YumiAdBlocker ()
 @property (nonatomic, strong, readwrite) WKContentRuleList *ruleList;
+@property (nonatomic, strong, readwrite) WKContentRuleList *anilibriaRuleList;
 @property (nonatomic, assign) BOOL preparing;
 @end
 
@@ -77,56 +78,83 @@ static NSString *const kYumiRuleID = @"yumi-ads-v2";
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"[]";
 }
 
-- (void)prepareWithCompletion:(void (^)(void))completion {
-    void (^finish)(void) = ^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (completion) completion();
-        });
-    };
-
-    if (self.ruleList) { finish(); return; }
-    if (self.preparing) { finish(); return; }
-    self.preparing = YES;
-
-    WKContentRuleListStore *store = [WKContentRuleListStore defaultStore];
-    __weak YumiAdBlocker *weakSelf = self;
-
-    void (^compile)(void) = ^{
-        NSString *json = [weakSelf rulesJSON];
-        [store compileContentRuleListForIdentifier:kYumiRuleID
-                            encodedContentRuleList:json
-                                 completionHandler:^(WKContentRuleList *list, NSError *error) {
-            YumiAdBlocker *strongSelf = weakSelf;
-            if (!strongSelf) return;
-            strongSelf.preparing = NO;
-            if (error) {
-                NSLog(@"[Yumi] adblock compile error: %@", error);
-            } else {
-                strongSelf.ruleList = list;
-                NSLog(@"[Yumi] adblock rules ready");
-            }
-            if (completion) completion();
+- (NSString *)anilibriaRulesJSON {
+    NSMutableArray *rules = [NSMutableArray array];
+    for (NSString *host in @[@"anilibria.fun", @"anilibria.top", @"anilibria.tv"]) {
+        NSString *escaped = [self regexEscape:host];
+        NSString *pattern = [NSString stringWithFormat:
+            @"^https?://([^/]+\\.)?%@/_next/static/.*\\.js", escaped];
+        [rules addObject:@{
+            @"trigger": @{ @"url-filter": pattern, @"resource-type": @[@"script"] },
+            @"action": @{ @"type": @"block" }
         }];
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
+    if (!data) return @"[]";
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"[]";
+}
+
+- (void)ensureListWithIdentifier:(NSString *)identifier
+                            json:(NSString *)json
+                          assign:(void (^)(WKContentRuleList *list))assign
+                      completion:(void (^)(void))completion {
+    WKContentRuleListStore *store = [WKContentRuleListStore defaultStore];
+    void (^done)(void) = ^{
+        if (!completion) return;
+        dispatch_async(dispatch_get_main_queue(), completion);
     };
 
     [store getAvailableContentRuleListIdentifiers:^(NSArray<NSString *> *identifiers) {
-        if ([identifiers containsObject:kYumiRuleID]) {
-            [store lookUpContentRuleListForIdentifier:kYumiRuleID
+        if ([identifiers containsObject:identifier]) {
+            [store lookUpContentRuleListForIdentifier:identifier
                                    completionHandler:^(WKContentRuleList *list, NSError *error) {
-                YumiAdBlocker *strongSelf = weakSelf;
-                if (!strongSelf) return;
                 if (list) {
-                    strongSelf.ruleList = list;
-                    strongSelf.preparing = NO;
-                    NSLog(@"[Yumi] adblock rules loaded from cache");
-                    if (completion) completion();
+                    if (assign) assign(list);
                 } else {
-                    compile();
+                    NSLog(@"[Yumi] rule lookup failed %@: %@", identifier, error);
                 }
+                done();
             }];
         } else {
-            compile();
+            [store compileContentRuleListForIdentifier:identifier
+                                encodedContentRuleList:json
+                                     completionHandler:^(WKContentRuleList *list, NSError *error) {
+                if (error) {
+                    NSLog(@"[Yumi] rule compile failed %@: %@", identifier, error);
+                } else if (list) {
+                    if (assign) assign(list);
+                }
+                done();
+            }];
         }
+    }];
+}
+
+- (void)prepareWithCompletion:(void (^)(void))completion {
+    if (self.ruleList && self.anilibriaRuleList) {
+        if (completion) dispatch_async(dispatch_get_main_queue(), completion);
+        return;
+    }
+    if (self.preparing) return;
+    self.preparing = YES;
+
+    __weak typeof(self) weakSelf = self;
+    [self ensureListWithIdentifier:kYumiRuleID
+                              json:[self rulesJSON]
+                            assign:^(WKContentRuleList *list) {
+        weakSelf.ruleList = list;
+    }
+                        completion:^{
+        [weakSelf ensureListWithIdentifier:@"yumi-anilibria-v1"
+                                      json:[weakSelf anilibriaRulesJSON]
+                                    assign:^(WKContentRuleList *list) {
+            weakSelf.anilibriaRuleList = list;
+        }
+                                completion:^{
+            weakSelf.preparing = NO;
+            NSLog(@"[Yumi] content rule lists ready");
+            if (completion) dispatch_async(dispatch_get_main_queue(), completion);
+        }];
     }];
 }
 

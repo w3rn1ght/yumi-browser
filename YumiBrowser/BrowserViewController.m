@@ -734,6 +734,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)applySettingsToTabs {
     YumiSettings *settings = [YumiSettings shared];
     WKContentRuleList *rules = [YumiAdBlocker shared].ruleList;
+    WKContentRuleList *anilibriaRules = [YumiAdBlocker shared].anilibriaRuleList;
 
     WKUserScript *poly = nil;
     WKUserScript *hook = nil;
@@ -759,6 +760,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         if (hook) [ucc addUserScript:hook];
         [ucc removeAllContentRuleLists];
         if (settings.adblockEnabled && rules) [ucc addContentRuleList:rules];
+        if (anilibriaRules) [ucc addContentRuleList:anilibriaRules];
         [tab applyUserAgent];
     }
 }
