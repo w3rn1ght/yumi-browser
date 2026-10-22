@@ -1,5 +1,6 @@
 #import "YumiPlayer.h"
 #import "YumiIcons.h"
+#import "YumiResumeStore.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <math.h>
@@ -12,6 +13,7 @@ static NSString *YumiEncode(NSString *s) {
 
 @interface YumiPlayerViewController () <AVPlayerViewControllerDelegate>
 @property (nonatomic, strong) NSURL *url;
+@property (nonatomic, strong) NSURL *currentURL;
 @property (nonatomic, copy) NSDictionary<NSString *, NSString *> *headers;
 @property (nonatomic, copy) NSString *streamTitle;
 
@@ -19,7 +21,13 @@ static NSString *YumiEncode(NSString *s) {
 @property (nonatomic, strong) AVPlayer *player;
 @property (nonatomic, strong) AVPlayerItem *item;
 
-@property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) UIButton *qualityButton;
+@property (nonatomic, copy) NSString *selectedQualityTitle;
+@property (nonatomic, assign) BOOL externalQuality;
+@property (nonatomic, assign) BOOL didFetchQualities;
+@property (nonatomic, assign) BOOL didDismiss;
+
+@property (nonatomic, strong) id timeObserver;
 @property (nonatomic, strong) UIView *errorView;
 @property (nonatomic, strong) UILabel *errorLabel;
 @property (nonatomic, strong) UILabel *hintLabel;
@@ -33,8 +41,10 @@ static NSString *YumiEncode(NSString *s) {
                       title:(NSString *)title {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _url = url;
+        _currentURL = url;
         _headers = [headers copy] ?: @{};
         _streamTitle = [title copy];
+        _qualityOptions = @[];
         self.modalPresentationStyle = UIModalPresentationFullScreen;
     }
     return self;
@@ -43,6 +53,11 @@ static NSString *YumiEncode(NSString *s) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
+
+    if (self.qualityOptions.count) {
+        self.externalQuality = YES;
+        self.selectedQualityTitle = self.qualityOptions.firstObject[@"title"];
+    }
 
     self.playerVC = [[AVPlayerViewController alloc] init];
     self.playerVC.view.backgroundColor = [UIColor blackColor];
@@ -54,9 +69,18 @@ static NSString *YumiEncode(NSString *s) {
     [self.view addSubview:self.playerVC.view];
     [self.playerVC didMoveToParentViewController:self];
 
-    [self setupCloseButton];
+    [self setupQualityButton];
     [self setupErrorView];
     [self startPlayback];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(saveProgress)
+                                                 name:UIApplicationDidEnterBackgroundNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(saveProgress)
+                                                 name:UIApplicationWillResignActiveNotification
+                                               object:nil];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -74,7 +98,17 @@ static NSString *YumiEncode(NSString *s) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self saveProgress];
     [self.player pause];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [self saveProgress];
+    if (!self.didDismiss) {
+        self.didDismiss = YES;
+        if (self.onDismiss) self.onDismiss();
+    }
 }
 
 - (BOOL)prefersStatusBarHidden { return YES; }
@@ -93,24 +127,93 @@ static NSString *YumiEncode(NSString *s) {
 
 #pragma mark - UI
 
-- (void)setupCloseButton {
+- (void)setupQualityButton {
     UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
     b.translatesAutoresizingMaskIntoConstraints = NO;
-    b.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.45];
+    b.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
     b.tintColor = [UIColor whiteColor];
-    b.layer.cornerRadius = 20.0;
-    [b setImage:[YumiIcons close] forState:UIControlStateNormal];
-    [b addTarget:self action:@selector(closeTapped) forControlEvents:UIControlEventTouchUpInside];
+    b.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    b.layer.cornerRadius = 16.0;
+    b.contentEdgeInsets = UIEdgeInsetsMake(0, 13, 0, 13);
+    b.hidden = YES;
+    [b addTarget:self action:@selector(qualityTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:b];
-    self.closeButton = b;
+    self.qualityButton = b;
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [b.topAnchor constraintEqualToAnchor:safe.topAnchor constant:10],
-        [b.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12],
-        [b.widthAnchor constraintEqualToConstant:40],
-        [b.heightAnchor constraintEqualToConstant:40]
+        [b.topAnchor constraintEqualToAnchor:safe.topAnchor constant:56],
+        [b.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-16],
+        [b.heightAnchor constraintEqualToConstant:32]
     ]];
+    [self updateQualityButton];
+}
+
+- (void)updateQualityButton {
+    BOOL show = (self.qualityOptions.count >= 2);
+    self.qualityButton.hidden = !show;
+    if (!show) return;
+
+    NSString *title = self.selectedQualityTitle.length ? self.selectedQualityTitle : @"Авто";
+    [self.qualityButton setTitle:[title stringByAppendingString:@" ▾"]
+                        forState:UIControlStateNormal];
+    [self.view bringSubviewToFront:self.qualityButton];
+}
+
+- (void)qualityTapped {
+    if (self.qualityOptions.count < 2) return;
+
+    UIAlertController *sheet =
+        [UIAlertController alertControllerWithTitle:@"Качество видео"
+                                            message:nil
+                                     preferredStyle:UIAlertControllerStyleActionSheet];
+
+    if (!self.externalQuality) {
+        BOOL autoSelected = !self.selectedQualityTitle.length ||
+                            [self.selectedQualityTitle isEqualToString:@"Авто"];
+        NSString *title = autoSelected ? @"✓ Авто" : @"Авто";
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *a) {
+            [self selectQuality:nil auto:YES];
+        }]];
+    }
+
+    for (NSDictionary *option in self.qualityOptions) {
+        NSString *title = option[@"title"] ?: @"";
+        if (!title.length) continue;
+        BOOL selected = [title isEqualToString:self.selectedQualityTitle];
+        [sheet addAction:[UIAlertAction actionWithTitle:(selected ? [@"✓ " stringByAppendingString:title] : title)
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *a) {
+            [self selectQuality:option auto:NO];
+        }]];
+    }
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.qualityButton;
+    sheet.popoverPresentationController.sourceRect = self.qualityButton.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)selectQuality:(NSDictionary *)option auto:(BOOL)auto {
+    NSString *title = auto ? @"Авто" : (option[@"title"] ?: @"");
+    NSURL *target = auto ? self.url : [NSURL URLWithString:option[@"url"] ?: @""];
+    if (!target) return;
+    if ([target.absoluteString isEqualToString:self.currentURL.absoluteString] &&
+        [title isEqualToString:self.selectedQualityTitle ?: @""]) {
+        return;
+    }
+
+    NSTimeInterval t = CMTimeGetSeconds(self.player.currentTime);
+    if (!isfinite(t) || t < 0) t = 0;
+
+    self.selectedQualityTitle = title;
+    self.startTime = t;
+    [self updateQualityButton];
+    [self startPlaybackWithURL:target];
 }
 
 - (UIButton *)panelButtonWithTitle:(NSString *)title action:(SEL)action {
@@ -233,16 +336,32 @@ static NSString *YumiEncode(NSString *s) {
 #pragma mark - Playback
 
 - (void)startPlayback {
+    [self startPlaybackWithURL:self.url];
+    if (!self.externalQuality && !self.didFetchQualities) {
+        self.didFetchQualities = YES;
+        [self loadVariantPlaylistForURL:self.url];
+    }
+}
+
+- (void)startPlaybackWithURL:(NSURL *)url {
+    if (!url) return;
+
+    if (self.timeObserver && self.player) {
+        [self.player removeTimeObserver:self.timeObserver];
+        self.timeObserver = nil;
+    }
     if (self.item) {
         @try { [self.item removeObserver:self forKeyPath:@"status"]; } @catch (NSException *e) {}
-        [[NSNotificationCenter defaultCenter] removeObserver:self name:AVPlayerItemFailedToPlayToEndTimeNotification object:self.item];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:AVPlayerItemFailedToPlayToEndTimeNotification
+                                                      object:self.item];
     }
 
     NSMutableDictionary *options = [NSMutableDictionary dictionary];
     options[AVURLAssetAllowsCellularAccessKey] = @YES;
     if (self.headers.count) options[@"AVURLAssetHTTPHeaderFieldsKey"] = self.headers;
 
-    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:self.url options:options];
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:options];
     AVPlayerItem *item = [AVPlayerItem playerItemWithAsset:asset automaticallyLoadedAssetKeys:@[@"playable"]];
     [item addObserver:self forKeyPath:@"status" options:NSKeyValueObservingOptionNew context:NULL];
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -250,11 +369,20 @@ static NSString *YumiEncode(NSString *s) {
                                                  name:AVPlayerItemFailedToPlayToEndTimeNotification
                                                object:item];
     self.item = item;
+    self.currentURL = url;
 
-    self.player = [AVPlayer playerWithPlayerItem:item];
-    self.player.actionAtItemEnd = AVPlayerActionAtItemEndPause;
-    self.playerVC.player = self.player;
+    AVPlayer *player = [AVPlayer playerWithPlayerItem:item];
+    player.actionAtItemEnd = AVPlayerActionAtItemEndPause;
+    self.player = player;
+    self.playerVC.player = player;
     self.errorView.hidden = YES;
+
+    __weak typeof(self) weakSelf = self;
+    self.timeObserver = [player addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(5.0, NSEC_PER_SEC)
+                                                             queue:dispatch_get_main_queue()
+                                                        usingBlock:^(CMTime time) {
+        [weakSelf saveProgress];
+    }];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath
@@ -264,7 +392,19 @@ static NSString *YumiEncode(NSString *s) {
     if (object == self.item && [keyPath isEqualToString:@"status"]) {
         if (self.item.status == AVPlayerItemStatusReadyToPlay) {
             self.errorView.hidden = YES;
-            [self.player play];
+            NSTimeInterval seek = self.startTime;
+            self.startTime = 0;
+            if (seek > 1.0) {
+                __weak typeof(self) weakSelf = self;
+                [self.player seekToTime:CMTimeMakeWithSeconds(seek, 600)
+                        toleranceBefore:kCMTimeZero
+                         toleranceAfter:kCMTimeZero
+                      completionHandler:^(BOOL finished) {
+                    [weakSelf.player play];
+                }];
+            } else {
+                [self.player play];
+            }
         } else if (self.item.status == AVPlayerItemStatusFailed) {
             [self showError:self.item.error.localizedDescription];
         }
@@ -282,28 +422,142 @@ static NSString *YumiEncode(NSString *s) {
     self.errorLabel.text = message.length ? message : @"Поток не открылся. Возможно, нужен Referer, другой UA или внешний плеер.";
     self.errorView.hidden = NO;
     [self.view bringSubviewToFront:self.errorView];
-    [self.view bringSubviewToFront:self.closeButton];
+    [self.view bringSubviewToFront:self.qualityButton];
+}
+
+#pragma mark - Quality
+
+- (void)loadVariantPlaylistForURL:(NSURL *)url {
+    NSString *string = url.absoluteString.lowercaseString;
+    if (![string containsString:@"m3u8"]) return;
+
+    NSMutableURLRequest *request =
+        [NSMutableURLRequest requestWithURL:url
+                                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                            timeoutInterval:20.0];
+    for (NSString *key in self.headers) {
+        [request setValue:self.headers[key] forHTTPHeaderField:key];
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                    completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!data.length) return;
+        NSString *text = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        if (!text.length) return;
+
+        NSArray *options = [[self class] variantsFromPlaylist:text baseURL:url];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (options.count < 2) return;
+            self.qualityOptions = options;
+            self.selectedQualityTitle = @"Авто";
+            [self updateQualityButton];
+        });
+    }];
+}
+
++ (NSArray<NSDictionary<NSString *, NSString *> *> *)variantsFromPlaylist:(NSString *)text
+                                                                  baseURL:(NSURL *)baseURL {
+    NSArray *lines = [text componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+    NSMutableDictionary<NSNumber *, NSDictionary *> *byHeight = [NSMutableDictionary dictionary];
+
+    for (NSUInteger i = 0; i < lines.count; i++) {
+        NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (![line hasPrefix:@"#EXT-X-STREAM-INF"]) continue;
+
+        NSInteger height = 0;
+        NSInteger bandwidth = 0;
+        NSRange resRange = [line rangeOfString:@"RESOLUTION="];
+        if (resRange.location != NSNotFound) {
+            NSString *tail = [line substringFromIndex:NSMaxRange(resRange)];
+            NSArray *parts = [tail componentsSeparatedByString:@"x"];
+            if (parts.count >= 2) {
+                height = [parts[1] integerValue];
+            }
+        }
+        NSRange bwRange = [line rangeOfString:@"BANDWIDTH="];
+        if (bwRange.location != NSNotFound) {
+            NSString *tail = [line substringFromIndex:NSMaxRange(bwRange)];
+            bandwidth = [tail integerValue];
+        }
+        if (height <= 0) continue;
+
+        NSString *uri = nil;
+        for (NSUInteger j = i + 1; j < lines.count; j++) {
+            NSString *next = [lines[j] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            if (!next.length) continue;
+            if ([next hasPrefix:@"#"]) continue;
+            uri = next;
+            break;
+        }
+        if (!uri.length) continue;
+
+        NSURL *variantURL = [NSURL URLWithString:uri relativeToURL:baseURL];
+        if (!variantURL) continue;
+
+        NSDictionary *existing = byHeight[@(height)];
+        if (!existing || [existing[@"bandwidth"] integerValue] < bandwidth) {
+            byHeight[@(height)] = @{
+                @"title": [NSString stringWithFormat:@"%ldp", (long)height],
+                @"url": variantURL.absoluteString,
+                @"bandwidth": [NSString stringWithFormat:@"%ld", (long)bandwidth]
+            };
+        }
+    }
+
+    NSArray *keys = [byHeight.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+        return [b compare:a];
+    }];
+    NSMutableArray *result = [NSMutableArray array];
+    for (NSNumber *key in keys) [result addObject:byHeight[key]];
+    return result;
+}
+
+#pragma mark - Progress
+
+- (void)saveProgress {
+    if (!self.resumeKey.length || !self.player) return;
+
+    NSTimeInterval time = CMTimeGetSeconds(self.player.currentTime);
+    if (!isfinite(time) || time <= 0) return;
+
+    NSTimeInterval duration = 0;
+    CMTime itemDuration = self.item.duration;
+    if (CMTIME_IS_NUMERIC(itemDuration)) {
+        duration = CMTimeGetSeconds(itemDuration);
+        if (!isfinite(duration)) duration = 0;
+    }
+
+    [YumiResumeStore saveForPageID:self.resumeKey
+                           animeID:self.animeID
+                           episode:self.episode
+                           dubbing:self.dubbing
+                              time:time
+                          duration:duration
+                             title:self.streamTitle];
 }
 
 - (void)dealloc {
+    if (self.timeObserver && self.player) {
+        @try { [self.player removeTimeObserver:self.timeObserver]; } @catch (NSException *e) {}
+    }
     @try { [self.item removeObserver:self forKeyPath:@"status"]; } @catch (NSException *e) {}
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Actions
 
-- (void)closeTapped {
-    [self.player pause];
-    [self dismissViewControllerAnimated:YES completion:nil];
-}
-
 - (void)retryTapped {
+    NSTimeInterval t = CMTimeGetSeconds(self.player.currentTime);
+    if (isfinite(t) && t > 1.0) self.startTime = t;
     self.errorView.hidden = YES;
-    [self startPlayback];
+    [self startPlaybackWithURL:self.currentURL ?: self.url];
 }
 
 - (void)copyTapped {
-    [UIPasteboard generalPasteboard].string = self.url.absoluteString ?: @"";
+    [UIPasteboard generalPasteboard].string = self.currentURL.absoluteString ?: self.url.absoluteString ?: @"";
     UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Ссылка скопирована"
                                                               message:nil
                                                        preferredStyle:UIAlertControllerStyleAlert];
@@ -312,13 +566,15 @@ static NSString *YumiEncode(NSString *s) {
 }
 
 - (void)vlcTapped {
-    NSString *enc = YumiEncode(self.url.absoluteString ?: @"");
+    NSURL *target = self.currentURL ?: self.url;
+    NSString *enc = YumiEncode(target.absoluteString ?: @"");
     NSURL *u = [NSURL URLWithString:[@"vlc-x-callback://x-callback-url/stream?url=" stringByAppendingString:enc]];
     if (u) [[UIApplication sharedApplication] openURL:u];
 }
 
 - (void)nplayerTapped {
-    NSString *s = self.url.absoluteString ?: @"";
+    NSURL *target = self.currentURL ?: self.url;
+    NSString *s = target.absoluteString ?: @"";
     NSString *url = nil;
     if ([s hasPrefix:@"https://"]) url = [@"nplayer-https://" stringByAppendingString:[s substringFromIndex:8]];
     else if ([s hasPrefix:@"http://"]) url = [@"nplayer-http://" stringByAppendingString:[s substringFromIndex:7]];
@@ -332,4 +588,3 @@ static NSString *YumiEncode(NSString *s) {
 }
 
 @end
-

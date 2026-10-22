@@ -9,6 +9,8 @@
 #import "SettingsViewController.h"
 #import "YumiYummyResolver.h"
 #import "YummyEpisodesViewController.h"
+#import "YumiSiteStore.h"
+#import "YumiResumeStore.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
@@ -27,6 +29,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, strong) UIBarButtonItem *menuItem;
 @property (nonatomic, strong) UIBarButtonItem *tabsItem;
 @property (nonatomic, strong) UIBarButtonItem *homeItem;
+@property (nonatomic, strong) UIBarButtonItem *streamsItem;
 
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *streams;
 @property (nonatomic, strong) NSDictionary *streamInfo;
@@ -35,7 +38,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, strong) UILabel *streamSubLabel;
 
 @property (nonatomic, strong) UIButton *yummyButton;
+@property (nonatomic, strong) UIButton *resumeButton;
 @property (nonatomic, copy) NSString *yummyPageID;
+@property (nonatomic, copy) NSDictionary *resumeInfo;
 
 @end
 
@@ -135,6 +140,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     self.forwardItem = [self itemWithImage:[YumiIcons chevronRight] action:@selector(goForwardTapped) label:@"Вперёд"];
     self.tabsItem = [self itemWithImage:[YumiIcons tabs] action:@selector(showTabs) label:@"Вкладки"];
     self.homeItem = [self itemWithImage:[YumiIcons home] action:@selector(goHomeTapped) label:@"Начало"];
+    self.streamsItem = [self itemWithImage:[YumiIcons streams] action:@selector(showStreamsList) label:@"Потоки"];
 
     UIBarButtonItem *(^flex)(void) = ^{
         return [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
@@ -143,7 +149,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     };
 
     self.toolbarItems = @[self.backItem, flex(), self.forwardItem, flex(),
-                          self.tabsItem, flex(), self.homeItem];
+                          self.streamsItem, flex(), self.tabsItem, flex(), self.homeItem];
 }
 
 - (void)setupProgressView {
@@ -363,6 +369,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self.view bringSubviewToFront:self.progressView];
     [self.view bringSubviewToFront:self.streamBanner];
     [self.view bringSubviewToFront:self.yummyButton];
+    [self.view bringSubviewToFront:self.resumeButton];
     [self refreshYummyAvailabilityForTab:tab];
     [self updateChrome];
     [self saveSession];
@@ -426,7 +433,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)goBackTapped { [self.activeTab goBack]; [self updateChrome]; }
 - (void)goForwardTapped { [self.activeTab goForward]; [self updateChrome]; }
-- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; self.yummyPageID = nil; self.yummyButton.hidden = YES; [self updateChrome]; }
+- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; self.yummyPageID = nil; self.resumeInfo = nil; self.yummyButton.hidden = YES; self.resumeButton.hidden = YES; [self updateChrome]; }
 
 - (void)reloadTapped {
     if (self.activeTab.isLoading) [self.activeTab stopLoading];
@@ -586,13 +593,34 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 #pragma mark - Потоки
 
 - (void)showStreamsList {
-    if (!self.streams.count) {
+    BOOL hasYummy = self.yummyPageID.length > 0;
+    NSDictionary *resume = hasYummy ? [YumiResumeStore resumeForPageID:self.yummyPageID] : nil;
+
+    if (!self.streams.count && !hasYummy) {
         [self showToast:@"Потоки пока не найдены"];
         return;
     }
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Найденные потоки"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Видео"
                                                                   message:nil
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    if (hasYummy) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Серии и озвучки"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *a) {
+            [self openYummyEpisodes];
+        }]];
+    }
+    if (resume) {
+        NSString *episode = [resume[@"episode"] description] ?: @"";
+        NSString *time = [YumiResumeStore timeStringForSeconds:[resume[@"time"] doubleValue]];
+        NSString *title = [NSString stringWithFormat:@"Продолжить: серия %@ · %@", episode, time];
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *a) {
+            [self openYummyResume];
+        }]];
+    }
     NSInteger max = MIN(8, (NSInteger)self.streams.count);
     for (NSInteger i = 0; i < max; i++) {
         NSDictionary *info = self.streams[(NSUInteger)i];
@@ -605,12 +633,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             [self playStreamInfo:info];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Очистить список"
-                                             style:UIAlertActionStyleDestructive
-                                           handler:^(__unused UIAlertAction *a) {
-        [self.streams removeAllObjects];
-        [self hideStreamBanner];
-    }]];
+    if (self.streams.count) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Очистить список потоков"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(__unused UIAlertAction *a) {
+            [self.streams removeAllObjects];
+            [self hideStreamBanner];
+        }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
     sheet.popoverPresentationController.sourceView = self.view;
     sheet.popoverPresentationController.sourceRect =
@@ -662,12 +692,34 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)presentPlayerWithURL:(NSURL *)url
                      headers:(NSDictionary *)headers
                        title:(NSString *)title {
+    [self presentPlayerWithURL:url headers:headers title:title resume:nil];
+}
+
+- (void)presentPlayerWithURL:(NSURL *)url
+                     headers:(NSDictionary *)headers
+                       title:(NSString *)title
+                      resume:(NSDictionary *)resume {
     if ([self.presentedViewController isKindOfClass:[YumiPlayerViewController class]]) return;
 
     YumiPlayerViewController *player = [[YumiPlayerViewController alloc] initWithURL:url
                                                                             headers:headers
                                                                               title:title];
     player.modalPresentationStyle = UIModalPresentationFullScreen;
+
+    if (resume) {
+        player.resumeKey = [resume[@"pageID"] description];
+        player.animeID = [resume[@"animeID"] description];
+        player.episode = [resume[@"episode"] description];
+        player.dubbing = [resume[@"dubbing"] description];
+        player.startTime = [resume[@"startTime"] doubleValue];
+
+        __weak typeof(self) weakSelf = self;
+        player.onDismiss = ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (self) [self refreshYummyAvailabilityForTab:self.activeTab];
+        };
+    }
+
     [self presentController:player];
 }
 
@@ -844,11 +896,32 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self.view addSubview:button];
     self.yummyButton = button;
 
+    UIButton *resume = [UIButton buttonWithType:UIButtonTypeSystem];
+    resume.translatesAutoresizingMaskIntoConstraints = NO;
+    resume.backgroundColor = [UIColor colorWithRed:0.13 green:0.55 blue:0.36 alpha:1.0];
+    resume.tintColor = [UIColor whiteColor];
+    resume.titleLabel.font = [UIFont systemFontOfSize:13.5 weight:UIFontWeightSemibold];
+    resume.layer.cornerRadius = 18.0;
+    resume.layer.shadowColor = [UIColor blackColor].CGColor;
+    resume.layer.shadowOpacity = 0.25;
+    resume.layer.shadowRadius = 6;
+    resume.layer.shadowOffset = CGSizeMake(0, 2);
+    resume.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    [resume setTitle:@"▶ Продолжить" forState:UIControlStateNormal];
+    resume.hidden = YES;
+    [resume addTarget:self action:@selector(openYummyResume) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:resume];
+    self.resumeButton = resume;
+
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
         [button.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-14],
         [button.bottomAnchor constraintEqualToAnchor:self.streamBanner.topAnchor constant:-8],
-        [button.heightAnchor constraintEqualToConstant:36]
+        [button.heightAnchor constraintEqualToConstant:36],
+
+        [resume.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+        [resume.bottomAnchor constraintEqualToAnchor:button.topAnchor constant:-8],
+        [resume.heightAnchor constraintEqualToConstant:36]
     ]];
 }
 
@@ -858,7 +931,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSURL *url = tab.webView.URL;
     if (![YumiYummyResolver isItemURL:url]) {
         self.yummyPageID = nil;
+        self.resumeInfo = nil;
         self.yummyButton.hidden = YES;
+        self.resumeButton.hidden = YES;
         return;
     }
 
@@ -880,12 +955,28 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             NSString *pageID = [result isKindOfClass:[NSString class]] ? result : nil;
             if (error || !pageID.length) {
                 self.yummyPageID = nil;
+                self.resumeInfo = nil;
                 self.yummyButton.hidden = YES;
+                self.resumeButton.hidden = YES;
                 return;
             }
             self.yummyPageID = pageID;
             self.yummyButton.hidden = NO;
+
+            NSDictionary *resume = [YumiResumeStore resumeForPageID:pageID];
+            self.resumeInfo = resume;
+            if (resume) {
+                NSTimeInterval time = [resume[@"time"] doubleValue];
+                NSString *title = [NSString stringWithFormat:@"▶ Продолжить %@",
+                                   [YumiResumeStore timeStringForSeconds:time]];
+                [self.resumeButton setTitle:title forState:UIControlStateNormal];
+                self.resumeButton.hidden = NO;
+            } else {
+                self.resumeButton.hidden = YES;
+            }
+
             [self.view bringSubviewToFront:self.yummyButton];
+            [self.view bringSubviewToFront:self.resumeButton];
         });
     }];
 }
@@ -897,9 +988,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }
 
     YumiTab *tab = self.activeTab;
+    NSDictionary *resume = [YumiResumeStore resumeForPageID:self.yummyPageID];
     YummyEpisodesViewController *vc =
         [[YummyEpisodesViewController alloc] initWithPageID:self.yummyPageID
-                                                  pageTitle:tab.title ?: @""];
+                                                  pageTitle:tab.title ?: @""
+                                                     resume:resume];
     vc.delegate = self;
 
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
@@ -907,14 +1000,62 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self presentController:nav];
 }
 
+- (void)openYummyResume {
+    NSDictionary *resume = [YumiResumeStore resumeForPageID:self.yummyPageID];
+    if (!resume) {
+        [self showToast:@"Нет сохранённой позиции"];
+        return;
+    }
+
+    NSString *animeID = [resume[@"animeID"] description];
+    NSString *episode = [resume[@"episode"] description];
+    NSString *dubbing = [resume[@"dubbing"] description] ?: @"";
+    if (!animeID.length || !episode.length) return;
+
+    [self showToast:@"Загружаю видео…"];
+
+    __weak typeof(self) weakSelf = self;
+    [YumiYummyResolver resolveStreamWithAnimeID:animeID
+                                        episode:episode
+                                        dubbing:dubbing
+                                     completion:^(NSURL *url, NSDictionary<NSString *,NSString *> *headers, NSString *title, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+
+        if (error || !url) {
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Не удалось продолжить"
+                                                    message:error.localizedDescription ?: @"Неизвестная ошибка"
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentController:alert];
+            return;
+        }
+
+        NSString *pageTitle = self.activeTab.title ?: @"";
+        NSString *finalTitle = title ?: @"";
+        if (pageTitle.length && finalTitle.length) {
+            finalTitle = [NSString stringWithFormat:@"%@ — %@", pageTitle, finalTitle];
+        } else if (pageTitle.length) {
+            finalTitle = pageTitle;
+        }
+
+        NSMutableDictionary *info = [resume mutableCopy];
+        info[@"startTime"] = resume[@"time"] ?: @0;
+        info[@"pageID"] = self.yummyPageID ?: @"";
+        [self presentPlayerWithURL:url headers:headers title:finalTitle resume:info];
+    }];
+}
+
 #pragma mark - YummyEpisodesViewControllerDelegate
 
 - (void)yummyEpisodesController:(YummyEpisodesViewController *)controller
                   playStreamURL:(NSURL *)url
                         headers:(NSDictionary<NSString *,NSString *> *)headers
-                          title:(NSString *)title {
+                          title:(NSString *)title
+                         resume:(NSDictionary *)resume {
     [controller dismissViewControllerAnimated:YES completion:^{
-        [self presentPlayerWithURL:url headers:headers title:title];
+        [self presentPlayerWithURL:url headers:headers title:title resume:resume];
     }];
 }
 
@@ -945,7 +1086,56 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         NSURL *url = [NSURL URLWithString:string];
         if ([YumiSettings shared].adblockEnabled && [YumiAdBlocker isAdHost:url.host]) return;
         [self addTabWithURLString:string];
+    } else if ([type isEqualToString:@"add-site"]) {
+        [self promptAddSiteFromWebView:webView];
+    } else if ([type isEqualToString:@"remove-site"]) {
+        NSNumber *index = message[@"index"];
+        if (![index isKindOfClass:[NSNumber class]]) return;
+        [YumiSiteStore removeSiteAtIndex:index.integerValue];
+        YumiTab *tab = [self tabForWebView:webView];
+        [tab loadHome];
     }
+}
+
+- (void)promptAddSiteFromWebView:(WKWebView *)webView {
+    YumiTab *tab = [self tabForWebView:webView];
+    __weak typeof(self) weakSelf = self;
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Добавить сайт"
+                                            message:nil
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"Название";
+        field.autocapitalizationType = UITextAutocapitalizationTypeWords;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"Адрес, например example.com";
+        field.keyboardType = UIKeyboardTypeURL;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Добавить"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        NSString *name = alert.textFields.firstObject.text ?: @"";
+        NSString *address = alert.textFields.lastObject.text ?: @"";
+        if (![YumiSiteStore addSiteWithName:name urlString:address]) {
+            [self showToast:@"Проверь адрес сайта"];
+            return;
+        }
+        [tab loadHome];
+    }]];
+
+    [self presentController:alert];
 }
 
 #pragma mark - YumiTabDelegate
@@ -979,7 +1169,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     if (tab != self.activeTab) return;
     if (![YumiYummyResolver isItemURL:url]) {
         self.yummyPageID = nil;
+        self.resumeInfo = nil;
         self.yummyButton.hidden = YES;
+        self.resumeButton.hidden = YES;
     }
     if (!self.addressField.isFirstResponder) {
         self.addressField.text = [tab displayURLString] ?: @"";

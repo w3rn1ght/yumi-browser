@@ -6,6 +6,7 @@
 + (UIImage *)chevronRight;
 + (UIImage *)reload;
 + (UIImage *)stop;
++ (UIImage *)streams;
 + (UIImage *)tabs;
 + (UIImage *)home;
 + (UIImage *)ellipsis;

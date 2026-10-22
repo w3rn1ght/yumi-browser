@@ -3,6 +3,7 @@
 #import "YumiScripts.h"
 #import "YumiBridge.h"
 #import "YumiAdBlocker.h"
+#import "YumiSiteStore.h"
 #import <UIKit/UIKit.h>
 
 static void YumiDisableITP(WKWebsiteDataStore *store) {
@@ -165,6 +166,8 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     self.title = @"Yumi";
     [self applyUserAgent];
     NSString *html = [YumiScripts homeHTML];
+    NSString *json = [YumiSiteStore sitesJSON];
+    html = [html stringByReplacingOccurrencesOfString:@"__YUMI_SITES_JSON__" withString:json];
     [self.webView loadHTMLString:html baseURL:nil];
 }
 

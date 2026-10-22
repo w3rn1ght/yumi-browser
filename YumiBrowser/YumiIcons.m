@@ -37,30 +37,44 @@
 }
 
 + (UIImage *)reload {
-    return [self draw:^(CGContextRef c, CGSize s) {
-        CGPoint center = CGPointMake(13, 13);
-        CGFloat radius = 8.0;
-        CGFloat start = (CGFloat)(-M_PI * 0.35);
-        CGFloat end = (CGFloat)(M_PI * 1.35);
-        CGContextAddArc(c, center.x, center.y, radius, start, end, 0);
-        CGContextStrokePath(c);
-        // стрелка
-        CGContextMoveToPoint(c, center.x + radius - 1.5, center.y - 6.0);
-        CGContextAddLineToPoint(c, center.x + radius + 2.0, center.y - 1.0);
-        CGContextAddLineToPoint(c, center.x + radius - 4.0, center.y - 0.5);
-        CGContextClosePath(c);
-        CGContextFillPath(c);
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(26, 26)];
+    UIImage *img = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        NSDictionary *attrs = @{
+            NSFontAttributeName: [UIFont systemFontOfSize:21 weight:UIFontWeightRegular],
+            NSForegroundColorAttributeName: [UIColor blackColor]
+        };
+        NSString *glyph = @"↻";
+        CGSize textSize = [glyph sizeWithAttributes:attrs];
+        [glyph drawAtPoint:CGPointMake((26.0 - textSize.width) / 2.0,
+                                       (26.0 - textSize.height) / 2.0 + 0.5)
+            withAttributes:attrs];
     }];
+    return [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 + (UIImage *)stop {
     return [self draw:^(CGContextRef c, CGSize s) {
-        CGContextAddLineToPoint(c, 8, 8);
-        CGContextAddLineToPoint(c, 18, 18);
+        CGContextSetLineWidth(c, 2.3);
+        CGContextMoveToPoint(c, 7.5, 7.5);
+        CGContextAddLineToPoint(c, 18.5, 18.5);
         CGContextStrokePath(c);
-        CGContextMoveToPoint(c, 18, 8);
-        CGContextAddLineToPoint(c, 8, 18);
+        CGContextMoveToPoint(c, 18.5, 7.5);
+        CGContextAddLineToPoint(c, 7.5, 18.5);
         CGContextStrokePath(c);
+    }];
+}
+
++ (UIImage *)streams {
+    return [self draw:^(CGContextRef c, CGSize s) {
+        UIBezierPath *rect = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(3.5, 5, 19, 16)
+                                                           cornerRadius:4.0];
+        CGContextAddPath(c, rect.CGPath);
+        CGContextStrokePath(c);
+        CGContextMoveToPoint(c, 11, 9.5);
+        CGContextAddLineToPoint(c, 18.5, 13);
+        CGContextAddLineToPoint(c, 11, 16.5);
+        CGContextClosePath(c);
+        CGContextFillPath(c);
     }];
 }
 

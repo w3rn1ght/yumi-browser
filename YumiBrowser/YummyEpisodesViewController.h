@@ -6,12 +6,15 @@
 - (void)yummyEpisodesController:(YummyEpisodesViewController *)controller
                   playStreamURL:(NSURL *)url
                         headers:(NSDictionary<NSString *, NSString *> *)headers
-                          title:(NSString *)title;
+                          title:(NSString *)title
+                         resume:(NSDictionary *)resume;
 @end
 
-@interface YummyEpisodesViewController : UITableViewController
+@interface YummyEpisodesViewController : UIViewController
 
-- (instancetype)initWithPageID:(NSString *)pageID pageTitle:(NSString *)pageTitle;
+- (instancetype)initWithPageID:(NSString *)pageID
+                     pageTitle:(NSString *)pageTitle
+                        resume:(NSDictionary *)resume;
 
 @property (nonatomic, weak) id<YummyEpisodesViewControllerDelegate> delegate;
 

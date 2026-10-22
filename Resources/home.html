@@ -7,95 +7,239 @@
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
   body {
-    margin: 0; padding: 28px 18px 40px;
-    font: -apple-system-body;
+    margin: 0;
+    padding: max(48px, env(safe-area-inset-top)) 22px max(28px, env(safe-area-inset-bottom));
     font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
-    background: #f2f3f7; color: #101114;
+    background: #f4f5f9;
+    color: #121319;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    -webkit-user-select: none;
+    user-select: none;
   }
   @media (prefers-color-scheme: dark) {
-    body { background: #0f1115; color: #f2f3f7; }
-    .card { background: #1a1d24 !important; border-color: #262b35 !important; }
-    .sub { color: #9aa3b2 !important; }
-    .search { background: #1a1d24 !important; border-color: #262b35 !important; color: #f2f3f7 !important; }
+    body { background: #0d0f14; color: #f3f4f8; }
+    .card { background: #171a21 !important; border-color: #242833 !important; }
+    .host { color: #8b94a7 !important; }
+    .add { background: #1b1f28 !important; border-color: #2b3040 !important; color: #f3f4f8 !important; }
+    .del { background: #262b37 !important; color: #aab2c4 !important; }
   }
-  h1 { font-size: 30px; margin: 6px 0 4px; letter-spacing: -0.5px; }
-  .lead { color: #6b7280; font-size: 14px; margin: 0 0 18px; line-height: 1.4; }
-  form { display: flex; gap: 8px; margin: 0 0 22px; }
-  .search {
-    flex: 1; height: 44px; border-radius: 12px; border: 1px solid #d9dce3;
-    background: #fff; padding: 0 14px; font-size: 16px; outline: none;
+
+  .hero {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 7vh 0 0;
   }
-  .go {
-    height: 44px; padding: 0 18px; border-radius: 12px; border: 0;
-    background: #2f6fed; color: #fff; font-size: 16px; font-weight: 600;
+  .logo {
+    width: 96px;
+    height: 96px;
+    border-radius: 27px;
+    filter: drop-shadow(0 14px 24px rgba(74, 78, 210, 0.28));
   }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  @media (min-width: 620px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
-  a.card {
-    display: block; text-decoration: none; color: inherit;
-    background: #fff; border: 1px solid #e2e5eb; border-radius: 14px; padding: 14px;
+  h1 {
+    margin: 18px 0 0;
+    font-size: 34px;
+    line-height: 1;
+    letter-spacing: -0.9px;
+    font-weight: 700;
+    text-align: center;
   }
-  .name { font-weight: 600; font-size: 15px; margin-bottom: 3px; }
-  .sub { color: #6b7280; font-size: 12px; line-height: 1.35; }
-  .tag {
-    display: inline-block; margin-top: 8px; font-size: 10px; font-weight: 700;
-    letter-spacing: .4px; text-transform: uppercase; padding: 3px 7px; border-radius: 6px;
+
+  .add {
+    margin-top: 30px;
+    height: 46px;
+    padding: 0 22px;
+    border-radius: 23px;
+    border: 1px solid #dde1ea;
+    background: #ffffff;
+    color: #171922;
+    font-size: 15px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
   }
-  .ok { background: #e6f0ff; color: #2f6fed; }
-  .no { background: #ffe8e6; color: #d93a2b; }
-  .note {
-    margin-top: 20px; font-size: 12.5px; line-height: 1.5; color: #6b7280;
-    border-left: 3px solid #2f6fed; padding-left: 12px;
+  .add:active { transform: scale(0.97); opacity: 0.85; }
+  .plus {
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6c5ce7, #00b8d9);
+    color: #fff;
+    font-size: 17px;
+    line-height: 20px;
+    font-weight: 400;
+    text-align: center;
   }
+
+  .sites {
+    width: 100%;
+    max-width: 620px;
+    margin-top: 26px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 11px;
+  }
+  @media (min-width: 700px) { .sites { grid-template-columns: 1fr 1fr 1fr; } }
+  .card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 66px;
+    padding: 12px 12px 12px 13px;
+    border-radius: 16px;
+    border: 1px solid #e3e6ee;
+    background: #ffffff;
+    color: inherit;
+    text-decoration: none;
+    overflow: hidden;
+  }
+  .card:active { opacity: 0.75; }
+  .badge {
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.16), rgba(0, 184, 217, 0.16));
+    color: #5b4fd6;
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+  }
+  @media (prefers-color-scheme: dark) { .badge { color: #9b93ff; } }
+  .meta { min-width: 0; flex: 1; }
+  .name {
+    font-size: 14.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .host {
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: #8a92a3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .del {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: 50%;
+    background: #eef0f6;
+    color: #8a92a3;
+    font-size: 15px;
+    line-height: 22px;
+    text-align: center;
+    padding: 0;
+  }
+  .del:active { background: #e2e5ee; }
 </style>
 </head>
 <body>
-  <h1>Yumi</h1>
-  <p class="lead">Браузер для iOS 12. Плееры открываются нативно: находим поток и играем в AVPlayer.</p>
-
-  <form onsubmit="var q=document.getElementById('q').value.trim(); if(q){location.href='https://yandex.ru/search/?text='+encodeURIComponent(q);} return false;">
-    <input id="q" class="search" type="search" placeholder="Найти или ввести адрес" autocomplete="off" autocapitalize="off">
-    <button class="go" type="submit">Найти</button>
-  </form>
-
-  <div class="grid">
-    <a class="card" href="https://old.yummyani.me">
-      <div class="name">YummyAnime</div>
-      <div class="sub">old.yummyani.me</div>
-      <span class="tag ok">плееры</span>
-    </a>
-    <a class="card" href="https://anilibria.tv">
-      <div class="name">AniLibria</div>
-      <div class="sub">anilibria.tv</div>
-      <span class="tag ok">плееры</span>
-    </a>
-    <a class="card" href="https://hdrezka.ag">
-      <div class="name">HDrezka</div>
-      <div class="sub">hdrezka.ag</div>
-      <span class="tag ok">плееры</span>
-    </a>
-    <a class="card" href="https://www.kinopoisk.ru">
-      <div class="name">Кинопоиск</div>
-      <div class="sub">DRM: платное видео не играет</div>
-      <span class="tag no">только страницы</span>
-    </a>
-    <a class="card" href="https://m.vk.com/video">
-      <div class="name">VK Видео</div>
-      <div class="sub">m.vk.com</div>
-      <span class="tag ok">плееры</span>
-    </a>
-    <a class="card" href="https://m.youtube.com">
-      <div class="name">YouTube</div>
-      <div class="sub">m.youtube.com</div>
-      <span class="tag ok">плееры</span>
-    </a>
+  <div class="hero">
+    <svg class="logo" viewBox="0 0 96 96" aria-label="Yumi">
+      <defs>
+        <linearGradient id="yg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6C5CE7"/>
+          <stop offset="1" stop-color="#00B8D9"/>
+        </linearGradient>
+      </defs>
+      <rect width="96" height="96" rx="27" fill="url(#yg)"/>
+      <path d="M30 26 L48 50 L66 26" fill="none" stroke="#ffffff" stroke-width="7"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M48 50 L48 69" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+      <path d="M57 59 L72 67 L57 75 Z" fill="#ffffff" opacity="0.92"/>
+    </svg>
+    <h1>Yumi</h1>
   </div>
 
-  <p class="note">
-    Если на странице запустился плеер — сверху появится плашка «Поток найден» с кнопкой ▶.
-    Она открывает видео в системном плеере с правильными Referer и cookies.
-    Кинопоиск: платный контент закрыт DRM (Widevine/FairPlay), на iOS 12 он не играет ни в одном браузере.
-  </p>
+  <button class="add" id="add"><span class="plus">+</span>Добавить сайт</button>
+
+  <div class="sites" id="sites"></div>
+
+<script>
+  var SITES = __YUMI_SITES_JSON__;
+
+  function post(message) {
+    try {
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.yumi) {
+        window.webkit.messageHandlers.yumi.postMessage(message);
+      }
+    } catch (e) {}
+  }
+
+  function hostOf(url) {
+    try { return new URL(url).host.replace(/^www\./, ''); }
+    catch (e) { return url; }
+  }
+
+  function render() {
+    var box = document.getElementById('sites');
+    box.innerHTML = '';
+    for (var i = 0; i < SITES.length; i++) {
+      (function (site, index) {
+        var card = document.createElement('a');
+        card.className = 'card';
+        card.href = site.url;
+
+        var badge = document.createElement('div');
+        badge.className = 'badge';
+        badge.textContent = (site.name || hostOf(site.url)).charAt(0);
+
+        var meta = document.createElement('div');
+        meta.className = 'meta';
+
+        var name = document.createElement('div');
+        name.className = 'name';
+        name.textContent = site.name || hostOf(site.url);
+
+        var host = document.createElement('div');
+        host.className = 'host';
+        host.textContent = hostOf(site.url);
+
+        meta.appendChild(name);
+        meta.appendChild(host);
+
+        var del = document.createElement('button');
+        del.className = 'del';
+        del.type = 'button';
+        del.setAttribute('aria-label', 'Удалить сайт');
+        del.textContent = '×';
+        del.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          post({ type: 'remove-site', index: index });
+        });
+
+        card.appendChild(badge);
+        card.appendChild(meta);
+        card.appendChild(del);
+        box.appendChild(card);
+      })(SITES[i], i);
+    }
+  }
+
+  document.getElementById('add').addEventListener('click', function () {
+    post({ type: 'add-site' });
+  });
+
+  render();
+</script>
 </body>
 </html>
