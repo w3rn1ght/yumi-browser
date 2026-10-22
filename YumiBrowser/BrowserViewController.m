@@ -1,4 +1,4 @@
-﻿#import "BrowserViewController.h"
+#import "BrowserViewController.h"
 #import "YumiSettings.h"
 #import "YumiAdBlocker.h"
 #import "YumiIcons.h"
@@ -7,11 +7,13 @@
 #import "YumiScripts.h"
 #import "TabsViewController.h"
 #import "SettingsViewController.h"
+#import "YumiYummyResolver.h"
+#import "YummyEpisodesViewController.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
-@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate>
+@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate>
 
 @property (nonatomic, strong) NSMutableArray<YumiTab *> *tabs;
 @property (nonatomic, assign) NSInteger activeIndex;
@@ -31,6 +33,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, strong) UIView *streamBanner;
 @property (nonatomic, strong) UILabel *streamLabel;
 @property (nonatomic, strong) UILabel *streamSubLabel;
+
+@property (nonatomic, strong) UIButton *yummyButton;
+@property (nonatomic, copy) NSString *yummyPageID;
 
 @end
 
@@ -53,6 +58,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self setupBarButtons];
     [self setupProgressView];
     [self setupStreamBanner];
+    [self setupYummyButton];
     [self setupBridge];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -356,6 +362,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
     [self.view bringSubviewToFront:self.progressView];
     [self.view bringSubviewToFront:self.streamBanner];
+    [self.view bringSubviewToFront:self.yummyButton];
+    [self refreshYummyAvailabilityForTab:tab];
     [self updateChrome];
     [self saveSession];
 }
@@ -418,7 +426,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)goBackTapped { [self.activeTab goBack]; [self updateChrome]; }
 - (void)goForwardTapped { [self.activeTab goForward]; [self updateChrome]; }
-- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; [self updateChrome]; }
+- (void)goHomeTapped { [self.activeTab loadHome]; [self hideStreamBanner]; self.yummyPageID = nil; self.yummyButton.hidden = YES; [self updateChrome]; }
 
 - (void)reloadTapped {
     if (self.activeTab.isLoading) [self.activeTab stopLoading];
@@ -816,6 +824,100 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 #pragma mark - РњРѕСЃС‚ РёР· JS
 
+#pragma mark - YummyAnime
+
+- (void)setupYummyButton {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.backgroundColor = [UIColor colorWithRed:0.86 green:0.22 blue:0.24 alpha:1.0];
+    button.tintColor = [UIColor whiteColor];
+    button.titleLabel.font = [UIFont systemFontOfSize:13.5 weight:UIFontWeightSemibold];
+    button.layer.cornerRadius = 18.0;
+    button.layer.shadowColor = [UIColor blackColor].CGColor;
+    button.layer.shadowOpacity = 0.25;
+    button.layer.shadowRadius = 6;
+    button.layer.shadowOffset = CGSizeMake(0, 2);
+    button.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+    [button setTitle:@"▶ Серии" forState:UIControlStateNormal];
+    button.hidden = YES;
+    [button addTarget:self action:@selector(openYummyEpisodes) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:button];
+    self.yummyButton = button;
+
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [button.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-14],
+        [button.bottomAnchor constraintEqualToAnchor:self.streamBanner.topAnchor constant:-8],
+        [button.heightAnchor constraintEqualToConstant:36]
+    ]];
+}
+
+- (void)refreshYummyAvailabilityForTab:(YumiTab *)tab {
+    if (tab != self.activeTab) return;
+
+    NSURL *url = tab.webView.URL;
+    if (![YumiYummyResolver isItemURL:url]) {
+        self.yummyPageID = nil;
+        self.yummyButton.hidden = YES;
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    NSString *script =
+        @"(function(){"
+         "var m=document.querySelector('meta#short_link');"
+         "if(m){var r=/a(\\d+)$/.exec(m.getAttribute('content')||'');if(r)return r[1];}"
+         "var el=document.querySelector('.rating-info[data-id]');"
+         "return el?el.getAttribute('data-id'):'';"
+         "})()";
+
+    [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (tab != self.activeTab) return;
+
+            NSString *pageID = [result isKindOfClass:[NSString class]] ? result : nil;
+            if (error || !pageID.length) {
+                self.yummyPageID = nil;
+                self.yummyButton.hidden = YES;
+                return;
+            }
+            self.yummyPageID = pageID;
+            self.yummyButton.hidden = NO;
+            [self.view bringSubviewToFront:self.yummyButton];
+        });
+    }];
+}
+
+- (void)openYummyEpisodes {
+    if (!self.yummyPageID.length) {
+        [self showToast:@"Не удалось определить id аниме"];
+        return;
+    }
+
+    YumiTab *tab = self.activeTab;
+    YummyEpisodesViewController *vc =
+        [[YummyEpisodesViewController alloc] initWithPageID:self.yummyPageID
+                                                  pageTitle:tab.title ?: @""];
+    vc.delegate = self;
+
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentController:nav];
+}
+
+#pragma mark - YummyEpisodesViewControllerDelegate
+
+- (void)yummyEpisodesController:(YummyEpisodesViewController *)controller
+                  playStreamURL:(NSURL *)url
+                        headers:(NSDictionary<NSString *,NSString *> *)headers
+                          title:(NSString *)title {
+    [controller dismissViewControllerAnimated:YES completion:^{
+        [self presentPlayerWithURL:url headers:headers title:title];
+    }];
+}
+
 - (void)setupBridge {
     __weak typeof(self) weakSelf = self;
     [YumiBridge shared].handler = ^(WKWebView *webView, NSDictionary *message) {
@@ -858,6 +960,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)tabDidFinishLoading:(YumiTab *)tab {
     if (tab != self.activeTab) return;
     self.progressView.progress = 1.0;
+    [self refreshYummyAvailabilityForTab:tab];
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (!weakSelf.activeTab.isLoading) {
@@ -874,6 +977,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
 - (void)tab:(YumiTab *)tab didUpdateURL:(NSURL *)url {
     if (tab != self.activeTab) return;
+    if (![YumiYummyResolver isItemURL:url]) {
+        self.yummyPageID = nil;
+        self.yummyButton.hidden = YES;
+    }
     if (!self.addressField.isFirstResponder) {
         self.addressField.text = [tab displayURLString] ?: @"";
     }
