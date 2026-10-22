@@ -133,14 +133,19 @@ static NSString *YumiNormalize(NSString *string) {
 }
 
 + (NSDictionary *)chooseItem:(NSArray<NSDictionary *> *)items dubbing:(NSString *)dubbing {
-    if (!items.count) return nil;
+    NSMutableArray<NSDictionary *> *playable = [NSMutableArray array];
+    for (NSDictionary *item in items) {
+        if ([[item[@"vkId"] description] length]) [playable addObject:item];
+    }
+    if (!playable.count) return nil;
+
     NSString *want = YumiNormalize(dubbing);
-    NSDictionary *fallback = items.firstObject;
+    NSDictionary *fallback = playable.firstObject;
 
     if (!want.length) return fallback;
 
     // точное/частичное совпадение по студии
-    for (NSDictionary *item in items) {
+    for (NSDictionary *item in playable) {
         NSString *studio = YumiNormalize(item[@"voiceStudio"]);
         if (!studio.length) continue;
         if ([studio isEqualToString:want] ||
@@ -152,7 +157,7 @@ static NSString *YumiNormalize(NSString *string) {
 
     // субтитры
     if ([want containsString:@"субтитр"]) {
-        for (NSDictionary *item in items) {
+        for (NSDictionary *item in playable) {
             NSString *type = YumiNormalize(item[@"voiceType"]);
             NSString *studio = YumiNormalize(item[@"voiceStudio"]);
             if ([type containsString:@"субтитр"] || [studio containsString:@"netflix"]) return item;
@@ -161,7 +166,7 @@ static NSString *YumiNormalize(NSString *string) {
 
     // озвучка
     if ([want containsString:@"дубл"] || [want containsString:@"озвуч"]) {
-        for (NSDictionary *item in items) {
+        for (NSDictionary *item in playable) {
             NSString *type = YumiNormalize(item[@"voiceType"]);
             if ([type containsString:@"дубл"] || [type containsString:@"озвуч"]) return item;
         }
@@ -213,15 +218,29 @@ static NSString *YumiNormalize(NSString *string) {
 
             NSDictionary *sources = [videoJSON isKindOfClass:[NSDictionary class]]
                 ? ((NSDictionary *)videoJSON)[@"sources"] : nil;
-            NSString *hls = [sources isKindOfClass:[NSDictionary class]] ? sources[@"hlsUrl"] : nil;
-            if (![hls isKindOfClass:[NSString class]] || !hls.length) {
-                completion(nil, nil, nil, YumiYummyError(@"Для этой озвучки нет HLS-потока (возможно, контент недоступен)", -7));
+            if (![sources isKindOfClass:[NSDictionary class]]) {
+                completion(nil, nil, nil, YumiYummyError(@"CVH не вернул источники видео", -7));
                 return;
             }
 
-            NSURL *url = [NSURL URLWithString:hls];
+            NSString *stream = nil;
+            NSArray *keys = @[@"hlsUrl", @"mpegFullHdUrl", @"mpegHighUrl",
+                              @"mpegQhdUrl", @"mpeg2kUrl", @"mpeg4kUrl"];
+            for (NSString *key in keys) {
+                NSString *value = sources[key];
+                if ([value isKindOfClass:[NSString class]] && value.length) {
+                    stream = value;
+                    break;
+                }
+            }
+            if (!stream.length) {
+                completion(nil, nil, nil, YumiYummyError(@"Для этой озвучки нет доступного потока", -7));
+                return;
+            }
+
+            NSURL *url = [NSURL URLWithString:stream];
             if (!url) {
-                completion(nil, nil, nil, YumiYummyError(@"Некорректный HLS-URL", -8));
+                completion(nil, nil, nil, YumiYummyError(@"Некорректный URL потока", -8));
                 return;
             }
 
