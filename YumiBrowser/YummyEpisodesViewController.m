@@ -558,7 +558,7 @@
                                        headers:headers
                                          title:finalTitle
                                         resume:resume];
-    }];
+    });
 }
 
 - (void)setBusy:(BOOL)busy {
