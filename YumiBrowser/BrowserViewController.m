@@ -47,6 +47,16 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, copy) NSDictionary *resumeInfo;
 
 - (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab;
+- (void)installCompatibilityStyleForTab:(YumiTab *)tab;
+- (void)downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename;
+- (void)promptDownloadURL;
+- (void)openGitHubReleases;
+- (void)startDownloadURL:(NSURL *)url
+               filename:(NSString *)filename
+                 pageURL:(NSURL *)pageURL
+                  cookie:(NSString *)cookie
+               userAgent:(NSString *)userAgent;
+- (void)presentDownloadedFile:(NSURL *)fileURL;
 - (void)updateIncognitoAppearance;
 - (void)setIncognitoMode:(BOOL)enable;
 
@@ -120,14 +130,13 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     field.backgroundColor = [UIColor colorWithWhite:0.94 alpha:1.0];
     field.font = [UIFont systemFontOfSize:15];
     field.placeholder = @"Поиск или адрес";
-    field.keyboardType = UIKeyboardTypeURL;
+    field.keyboardType = UIKeyboardTypeWebSearch;
     field.returnKeyType = UIReturnKeyGo;
     field.autocapitalizationType = UITextAutocapitalizationTypeNone;
     field.autocorrectionType = UITextAutocorrectionTypeNo;
     field.spellCheckingType = UITextSpellCheckingTypeNo;
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
     field.delegate = self;
-    field.textContentType = UITextContentTypeURL;
     self.addressField = field;
     self.navigationItem.titleView = field;
 }
@@ -560,6 +569,14 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [sheet addAction:[UIAlertAction actionWithTitle:@"Поделиться ссылкой"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self shareTapped]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Скачать файл по ссылке…"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self promptDownloadURL]; }]];
+    if ([host isEqualToString:@"github.com"] || [host isEqualToString:@"www.github.com"]) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Релизы GitHub"
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *a) { [self openGitHubReleases]; }]];
+    }
     [sheet addAction:[UIAlertAction actionWithTitle:@"Открыть в Safari"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self openInSafari]; }]];
@@ -664,6 +681,225 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSURL *url = self.activeTab.url ?: [NSURL URLWithString:self.activeTab.displayURLString];
     if (!url) return;
     [[UIApplication sharedApplication] openURL:url];
+}
+
+- (void)openGitHubReleases {
+    NSURL *url = self.activeTab.webView.URL ?: self.activeTab.url;
+    NSString *host = url.host.lowercaseString;
+    if (![host isEqualToString:@"github.com"] && ![host isEqualToString:@"www.github.com"]) {
+        [self showToast:@"Открой страницу GitHub"];
+        return;
+    }
+    NSArray<NSString *> *parts = url.pathComponents;
+    if (parts.count < 3) {
+        [self showToast:@"Открой страницу репозитория"];
+        return;
+    }
+    static NSSet *reserved = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        reserved = [NSSet setWithArray:@[@"login", @"signup", @"settings", @"notifications",
+                                         @"explore", @"topics", @"collections", @"sponsors",
+                                         @"marketplace", @"orgs", @"users", @"search", @"new"]];
+    });
+    if ([reserved containsObject:parts[1].lowercaseString]) {
+        [self showToast:@"Открой страницу репозитория"];
+        return;
+    }
+    NSString *releases = [NSString stringWithFormat:@"https://github.com/%@/%@/releases",
+                          parts[1], parts[2]];
+    [self.activeTab loadURL:[NSURL URLWithString:releases]];
+}
+
+#pragma mark - Скачивание
+
+- (void)promptDownloadURL {
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Скачать файл"
+                                            message:@"Прямая ссылка на .deb, .ipa или другой файл"
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"https://…";
+        field.keyboardType = UIKeyboardTypeWebSearch;
+        field.returnKeyType = UIReturnKeyGo;
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+        NSString *clipboard = [UIPasteboard generalPasteboard].string;
+        if ([clipboard hasPrefix:@"http://"] || [clipboard hasPrefix:@"https://"]) {
+            field.text = clipboard;
+        }
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Скачать"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        NSString *text = alert.textFields.firstObject.text ?: @"";
+        text = [text stringByTrimmingCharactersInSet:
+                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (![text containsString:@"://"]) text = [@"https://" stringByAppendingString:text];
+        NSURL *url = [NSURL URLWithString:text];
+        NSString *scheme = url.scheme.lowercaseString;
+        if (!url || (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"])) {
+            [self showToast:@"Нужна http(s)-ссылка"];
+            return;
+        }
+        [self downloadURL:url suggestedFilename:nil];
+    }]];
+    [self presentController:alert];
+}
+
+- (void)tab:(YumiTab *)tab downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename {
+    if (!url) return;
+    if (!tab) tab = self.activeTab;
+    NSString *scheme = url.scheme.lowercaseString;
+    if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) {
+        [self showToast:@"Эта ссылка не поддерживается"];
+        return;
+    }
+    if (!tab) {
+        [self showToast:@"Нет активной вкладки"];
+        return;
+    }
+
+    NSURL *pageURL = tab.webView.URL ?: tab.url;
+    NSString *userAgent = [[YumiSettings shared] userAgentForHost:url.host];
+    [self showToast:@"Скачивание…"];
+    [tab cookieHeaderForURL:url completion:^(NSString *cookie) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self startDownloadURL:url
+                          filename:filename
+                           pageURL:pageURL
+                            cookie:cookie
+                         userAgent:userAgent];
+        });
+    }];
+}
+
+- (void)startDownloadURL:(NSURL *)url
+                filename:(NSString *)filename
+                  pageURL:(NSURL *)pageURL
+                   cookie:(NSString *)cookie
+                userAgent:(NSString *)userAgent {
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    config.timeoutIntervalForRequest = 60.0;
+    config.timeoutIntervalForResource = 900.0;
+    config.HTTPShouldSetCookies = NO;
+    config.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
+
+    NSMutableURLRequest *request =
+        [NSMutableURLRequest requestWithURL:url
+                                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                            timeoutInterval:60.0];
+    [request setValue:@"*/*" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"ru-RU,ru;q=0.9,en;q=0.8" forHTTPHeaderField:@"Accept-Language"];
+    if (userAgent.length) [request setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+    if (cookie.length) [request setValue:cookie forHTTPHeaderField:@"Cookie"];
+    if (pageURL.absoluteString.length) [request setValue:pageURL.absoluteString forHTTPHeaderField:@"Referer"];
+
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:config
+                                                         delegate:nil
+                                                    delegateQueue:[NSOperationQueue mainQueue]];
+    NSURLSessionDownloadTask *task =
+        [session downloadTaskWithRequest:request
+                       completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+        [session finishTasksAndInvalidate];
+
+        if (error || !location) {
+            NSString *message = error.localizedDescription ?: @"Не удалось скачать файл";
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Ошибка скачивания"
+                                                    message:message
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
+                                                      style:UIAlertActionStyleCancel
+                                                    handler:nil]];
+            [self presentController:alert];
+            return;
+        }
+
+        NSString *mime = [(response.MIMEType ?: @"") lowercaseString];
+        if ([mime containsString:@"text/html"]) {
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Файл не скачан"
+                                                    message:@"Сервер вернул страницу вместо файла. Для приватного репозитория GitHub сначала войди в аккаунт."
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
+                                                      style:UIAlertActionStyleCancel
+                                                    handler:nil]];
+            [self presentController:alert];
+            return;
+        }
+
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSString *name = filename.length ? filename : response.suggestedFilename;
+        if (!name.length) name = url.lastPathComponent;
+        name = [name stringByRemovingPercentEncoding] ?: name;
+        name = [name stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
+        name = [name stringByReplacingOccurrencesOfString:@"\\" withString:@"_"];
+        name = [name stringByReplacingOccurrencesOfString:@":" withString:@"_"];
+        name = [name stringByTrimmingCharactersInSet:
+                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (!name.length || [name isEqualToString:@"."] || [name isEqualToString:@".."]) {
+            name = @"download";
+        }
+        if (![name pathExtension].length && [url pathExtension].length) {
+            name = [name stringByAppendingPathExtension:url.pathExtension];
+        }
+
+        NSString *documents = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
+                                                                   NSUserDomainMask, YES) firstObject];
+        NSString *directory = [documents stringByAppendingPathComponent:@"Downloads"];
+        [fm createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+
+        NSString *destination = [directory stringByAppendingPathComponent:name];
+        if ([fm fileExistsAtPath:destination]) {
+            NSString *base = [name stringByDeletingPathExtension];
+            NSString *extension = [name pathExtension];
+            NSInteger index = 1;
+            do {
+                NSString *candidate = extension.length
+                    ? [NSString stringWithFormat:@"%@-%ld.%@", base, (long)index, extension]
+                    : [NSString stringWithFormat:@"%@-%ld", base, (long)index];
+                destination = [directory stringByAppendingPathComponent:candidate];
+                index += 1;
+            } while ([fm fileExistsAtPath:destination]);
+        }
+
+        NSURL *destinationURL = [NSURL fileURLWithPath:destination];
+        NSError *fileError = nil;
+        BOOL saved = [fm moveItemAtURL:location toURL:destinationURL error:&fileError];
+        if (!saved) {
+            saved = [fm copyItemAtURL:location toURL:destinationURL error:&fileError];
+        }
+        if (!saved) {
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Не удалось сохранить файл"
+                                                    message:fileError.localizedDescription ?: @"Ошибка файловой системы"
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
+                                                      style:UIAlertActionStyleCancel
+                                                    handler:nil]];
+            [self presentController:alert];
+            return;
+        }
+
+        [self showToast:[NSString stringWithFormat:@"Скачано: %@", destinationURL.lastPathComponent]];
+        [self presentDownloadedFile:destinationURL];
+    }];
+    [task resume];
+}
+
+- (void)presentDownloadedFile:(NSURL *)fileURL {
+    UIActivityViewController *activity =
+        [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
+                                          applicationActivities:nil];
+    activity.popoverPresentationController.sourceView = self.view;
+    activity.popoverPresentationController.sourceRect =
+        CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    [self presentController:activity];
 }
 
 - (void)showSettings {
@@ -1113,6 +1349,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab {
     NSURL *url = tab.webView.URL;
     if (![YumiAnilibriaResolver isSupportedHost:url.host]) return;
+    if (![YumiSettings shared].webpCoversEnabled) return;
 
     NSString *bundle = [YumiScripts webpHero];
     NSString *boot = [YumiScripts webpImages];
@@ -1120,12 +1357,35 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
     // AniLibria serves covers as WebP, which WebKit on iOS 12 cannot decode.
     // The polyfill is injected only here; other sites do not pay this cost.
+    // WebAssembly is disabled deliberately: webp-hero then uses its asm.js
+    // fallback, which is slower but much more reliable on iOS 12 WebKit.
     NSString *script = [NSString stringWithFormat:
-        @"if(!window.__yumiWebpBooted){%@\n%@}", bundle, boot];
+        @"try{window.WebAssembly=undefined;}catch(e){};"
+         "if(!window.__yumiWebpBooted){%@\n%@}", bundle, boot];
 
     [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
         if (error) {
             NSLog(@"[Yumi] WebP polyfill failed: %@", error.localizedDescription);
+        }
+    }];
+}
+
+- (void)installCompatibilityStyleForTab:(YumiTab *)tab {
+    NSURL *url = tab.webView.URL;
+    NSString *host = url.host.lowercaseString;
+    if (!host.length) return;
+
+    NSString *script = nil;
+    if ([host isEqualToString:@"github.com"] || [host hasSuffix:@".github.com"]) {
+        script = [YumiScripts githubCompat];
+    } else if ([YumiAnilibriaResolver isSupportedHost:host]) {
+        script = [YumiScripts anilibriaCompat];
+    }
+    if (!script.length) return;
+
+    [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
+        if (error) {
+            NSLog(@"[Yumi] compatibility style failed on %@: %@", host, error.localizedDescription);
         }
     }];
 }
@@ -1441,6 +1701,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)tabDidFinishLoading:(YumiTab *)tab {
+    [self installCompatibilityStyleForTab:tab];
     if ([YumiAnilibriaResolver isSupportedHost:tab.webView.URL.host]) {
         [self installAnilibriaWebPSupportForTab:tab];
     }
@@ -1543,6 +1804,47 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     } else {
         [self showToast:@"Нет приложения для этой ссылки"];
     }
+}
+
+- (void)tab:(YumiTab *)tab didTerminateWithURL:(NSURL *)url {
+    if (tab != self.activeTab) return;
+    if ([self.presentedViewController isKindOfClass:[YumiPlayerViewController class]]) return;
+
+    BOOL anilibria = [YumiAnilibriaResolver isSupportedHost:url.host];
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Страница постоянно падает"
+                                            message:@"WebKit не смог её показать. Можно перезагрузить, открыть в Safari или отключить тяжёлое исправление обложек."
+                                     preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Перезагрузить"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        [tab resetCrashGuard];
+        [tab reload];
+    }]];
+
+    if (anilibria && [YumiSettings shared].webpCoversEnabled && url) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Без WebP-обложек"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [YumiSettings shared].webpCoversEnabled = NO;
+            [tab resetCrashGuard];
+            [tab reload];
+            [self showToast:@"WebP-обложки отключены"];
+        }]];
+    }
+
+    if (url) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть в Safari"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [[UIApplication sharedApplication] openURL:url];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [self presentController:alert];
 }
 
 - (WKWebView *)tab:(YumiTab *)tab

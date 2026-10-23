@@ -7,5 +7,7 @@
 + (NSString *)homeHTML;
 + (NSString *)webpHero;
 + (NSString *)webpImages;
++ (NSString *)githubCompat;
++ (NSString *)anilibriaCompat;
 
 @end

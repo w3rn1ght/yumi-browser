@@ -21,6 +21,7 @@ typedef NS_ENUM(NSInteger, YumiSearchEngine) {
 @property (nonatomic, assign) BOOL adblockEnabled;
 @property (nonatomic, assign) BOOL autoNativePlayer;
 @property (nonatomic, assign) BOOL mediaHookEnabled;
+@property (nonatomic, assign) BOOL webpCoversEnabled;
 @property (nonatomic, assign) YumiSearchEngine searchEngine;
 
 - (NSString *)userAgentForHost:(NSString *)host;

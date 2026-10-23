@@ -121,7 +121,10 @@
         }
         try {
             img.classList.remove('poster-loading');
+            img.classList.remove('opacity-0');
+            img.classList.remove('invisible');
             img.classList.add('poster-loaded');
+            img.style.opacity = '1';
         } catch (e) {}
         if (machine.cache) {
             var keys = Object.keys(machine.cache);

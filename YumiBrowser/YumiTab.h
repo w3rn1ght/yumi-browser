@@ -13,6 +13,8 @@
 - (void)tab:(YumiTab *)tab didFailWithError:(NSError *)error;
 - (void)tab:(YumiTab *)tab didFindStreamInfo:(NSDictionary *)info;
 - (void)tab:(YumiTab *)tab openExternalURL:(NSURL *)url;
+- (void)tab:(YumiTab *)tab downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename;
+- (void)tab:(YumiTab *)tab didTerminateWithURL:(NSURL *)url;
 - (WKWebView *)tab:(YumiTab *)tab
     createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
                  navigationAction:(WKNavigationAction *)navigationAction;
@@ -51,6 +53,7 @@
 - (NSString *)displayURLString;
 - (void)applyUserAgent;
 - (void)pauseMedia;
+- (void)resetCrashGuard;
 - (void)cookieHeaderForURL:(NSURL *)url completion:(void (^)(NSString *cookie))completion;
 
 @end

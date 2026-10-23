@@ -4,6 +4,7 @@
 typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     YumiSettingsSwitchMediaHook = 100,
     YumiSettingsSwitchAutoPlayer,
+    YumiSettingsSwitchWebPCovers,
     YumiSettingsSwitchAdblock
 };
 
@@ -30,7 +31,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
         case 0: return 3;   // версия сайта, UA, поисковик
-        case 1: return 2;   // перехват, авто-плеер
+        case 1: return 3;   // перехват, авто-плеер, WebP-обложки
         case 2: return 1;   // реклама
         case 3: return 2;   // очистить данные, сброс
         default: return 3;  // о приложении
@@ -52,7 +53,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
         case 0:
             return @"Если сайт криво выглядит или падает — включи полную версию. Настройка «Версия сайта» задаёт режим по умолчанию, а в меню браузера её можно переключить для конкретного сайта. Поисковик используется, когда в адресной строке вводят запрос, а не адрес.";
         case 1:
-            return @"Перехват находит m3u8/mp4, которые использует плеер сайта, и умеет открыть их в системном плеере с нужными Referer и cookies. Авто-режим сразу запускает первый найденный HLS.";
+            return @"Перехват находит m3u8/mp4, которые использует плеер сайта, и умеет открыть их в системном плеере с нужными Referer и cookies. Авто-режим сразу запускает первый найденный HLS. WebP-обложки нужны AniLibria: на iOS 12 браузер не умеет их декодировать. Если сайт показывает чёрный экран — выключи эту настройку и перезагрузи страницу.";
         case 2:
             return @"Блокировка работает на уровне WebKit (правила + косметика). Если сайт сломался — выключи и перезагрузи страницу.";
         default:
@@ -106,9 +107,14 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
                                          tag:YumiSettingsSwitchMediaHook
                                           on:s.mediaHookEnabled];
         }
-        return [self switchCellWithTitle:@"Автоматически играть HLS"
-                                     tag:YumiSettingsSwitchAutoPlayer
-                                      on:s.autoNativePlayer];
+        if (indexPath.row == 1) {
+            return [self switchCellWithTitle:@"Автоматически играть HLS"
+                                         tag:YumiSettingsSwitchAutoPlayer
+                                          on:s.autoNativePlayer];
+        }
+        return [self switchCellWithTitle:@"WebP-обложки AniLibria"
+                                     tag:YumiSettingsSwitchWebPCovers
+                                      on:s.webpCoversEnabled];
     }
 
     if (indexPath.section == 2) {
@@ -152,6 +158,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     YumiSettings *s = [self settings];
     if (sw.tag == YumiSettingsSwitchMediaHook) s.mediaHookEnabled = sw.isOn;
     else if (sw.tag == YumiSettingsSwitchAutoPlayer) s.autoNativePlayer = sw.isOn;
+    else if (sw.tag == YumiSettingsSwitchWebPCovers) s.webpCoversEnabled = sw.isOn;
     else if (sw.tag == YumiSettingsSwitchAdblock) s.adblockEnabled = sw.isOn;
     [self.delegate settingsDidChange:self];
 }

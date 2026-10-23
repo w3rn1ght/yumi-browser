@@ -6,6 +6,7 @@ static NSString *const kYumiCustomUA = @"YumiCustomUA";
 static NSString *const kYumiAdblock = @"YumiAdblock";
 static NSString *const kYumiAutoPlayer = @"YumiAutoPlayer";
 static NSString *const kYumiMediaHook = @"YumiMediaHook";
+static NSString *const kYumiWebPCovers = @"YumiWebPCovers";
 static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
 static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
@@ -26,7 +27,13 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
             [d setBool:YES forKey:kYumiAdblock];
             [d setBool:NO forKey:kYumiAutoPlayer];
             [d setBool:YES forKey:kYumiMediaHook];
+            [d setBool:YES forKey:kYumiWebPCovers];
             [d setInteger:YumiSearchEngineYandex forKey:kYumiSearchEngine];
+            [d synchronize];
+        }
+        // Added in 1.0.4: existing installs must keep working WebP covers.
+        if ([d objectForKey:kYumiWebPCovers] == nil) {
+            [d setBool:YES forKey:kYumiWebPCovers];
             [d synchronize];
         }
     }
@@ -53,6 +60,9 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 - (BOOL)mediaHookEnabled { return [[self defaults] boolForKey:kYumiMediaHook]; }
 - (void)setMediaHookEnabled:(BOOL)v { [[self defaults] setBool:v forKey:kYumiMediaHook]; }
+
+- (BOOL)webpCoversEnabled { return [[self defaults] boolForKey:kYumiWebPCovers]; }
+- (void)setWebpCoversEnabled:(BOOL)v { [[self defaults] setBool:v forKey:kYumiWebPCovers]; }
 
 - (YumiSearchEngine)searchEngine {
     return (YumiSearchEngine)[[self defaults] integerForKey:kYumiSearchEngine];
@@ -145,6 +155,7 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
     self.adblockEnabled = YES;
     self.autoNativePlayer = NO;
     self.mediaHookEnabled = YES;
+    self.webpCoversEnabled = YES;
     self.searchEngine = YumiSearchEngineYandex;
     [[self defaults] synchronize];
 }

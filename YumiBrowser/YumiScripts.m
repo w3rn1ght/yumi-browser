@@ -26,5 +26,7 @@
 + (NSString *)homeHTML { return [self stringFromResource:@"home" extension:@"html"]; }
 + (NSString *)webpHero { return [self stringFromResource:@"webp-hero" extension:@"js"]; }
 + (NSString *)webpImages { return [self stringFromResource:@"webp-images" extension:@"js"]; }
++ (NSString *)githubCompat { return [self stringFromResource:@"github-compat" extension:@"js"]; }
++ (NSString *)anilibriaCompat { return [self stringFromResource:@"anilibria-compat" extension:@"js"]; }
 
 @end

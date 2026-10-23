@@ -26,6 +26,8 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
 
 @interface YumiTab () <WKNavigationDelegate, WKUIDelegate>
 @property (nonatomic, strong, readwrite) WKWebView *webView;
+@property (nonatomic, assign) NSInteger crashCount;
+@property (nonatomic, strong) NSDate *lastCrashDate;
 - (void)reportStreamURL:(NSURL *)url kind:(NSString *)kind;
 @end
 
@@ -277,19 +279,71 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     decidePolicyForNavigationResponse:(WKNavigationResponse *)navigationResponse
                      decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler {
     if (!navigationResponse.isForMainFrame) { decisionHandler(WKNavigationResponsePolicyAllow); return; }
+
+    NSURL *responseURL = navigationResponse.response.URL;
+    NSString *scheme = responseURL.scheme.lowercaseString;
+    BOOL isHTTP = [scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"];
+    NSHTTPURLResponse *http = [navigationResponse.response isKindOfClass:[NSHTTPURLResponse class]]
+        ? (NSHTTPURLResponse *)navigationResponse.response : nil;
+    NSString *disposition = [[http allHeaderFields][@"Content-Disposition"] lowercaseString];
+    if (disposition.length == 0 && http) {
+        for (id key in http.allHeaderFields) {
+            if ([[key description] caseInsensitiveCompare:@"Content-Disposition"] == NSOrderedSame) {
+                disposition = [[http.allHeaderFields[key] description] lowercaseString];
+                break;
+            }
+        }
+    }
+    BOOL attachment = [disposition containsString:@"attachment"];
+
+    // An explicit attachment wins even for media: the user asked to download it.
+    if (isHTTP && attachment) {
+        decisionHandler(WKNavigationResponsePolicyCancel);
+        [self.delegate tab:self
+              downloadURL:responseURL
+        suggestedFilename:navigationResponse.response.suggestedFilename];
+        return;
+    }
+
+    // Media navigation is not a download, even though WKWebView cannot display
+    // it. GitHub release assets are the exception; they are handled below.
     NSString *mime = [(navigationResponse.response.MIMEType ?: @"") lowercaseString];
     BOOL isHLS = [mime containsString:@"mpegurl"];
     BOOL isDash = [mime containsString:@"dash+xml"];
     BOOL isMedia = isHLS || isDash || [mime hasPrefix:@"video/"];
-    if (isMedia) {
-        NSURL *u = navigationResponse.response.URL;
-        if (u && ([YumiTab isDirectMediaURL:u] || isHLS || isDash)) {
+    BOOL githubAsset = isHTTP && [responseURL.absoluteString containsString:@"/releases/download/"];
+    if (isMedia && !githubAsset) {
+        if ([YumiTab isDirectMediaURL:responseURL] || isHLS || isDash) {
             decisionHandler(WKNavigationResponsePolicyCancel);
             NSString *kind = isHLS ? @"hls" : (isDash ? @"dash" : nil);
-            [self reportStreamURL:u kind:kind];
+            [self reportStreamURL:responseURL kind:kind];
             return;
         }
     }
+
+    if (!githubAsset && responseURL && [YumiTab isDirectMediaURL:responseURL]) {
+        decisionHandler(WKNavigationResponsePolicyCancel);
+        [self reportStreamURL:responseURL kind:nil];
+        return;
+    }
+
+    // WKWebView has no download manager on iOS 12. Release assets and other
+    // attachments would otherwise open as a blank page, so hand them to the
+    // native downloader instead.
+    NSString *ext = responseURL.pathExtension.lowercaseString;
+    NSSet *downloadExtensions = [NSSet setWithArray:@[@"deb", @"ipa", @"dmg", @"pkg", @"apk",
+                                                      @"zip", @"7z", @"rar", @"tar", @"gz", @"xz",
+                                                      @"bz2", @"tgz", @"iso"]];
+    BOOL downloadExtension = ext.length && [downloadExtensions containsObject:ext];
+    BOOL cannotShow = !navigationResponse.canShowMIMEType;
+    if (isHTTP && (downloadExtension || cannotShow || githubAsset)) {
+        decisionHandler(WKNavigationResponsePolicyCancel);
+        [self.delegate tab:self
+              downloadURL:responseURL
+        suggestedFilename:navigationResponse.response.suggestedFilename];
+        return;
+    }
+
     decisionHandler(WKNavigationResponsePolicyAllow);
 }
 
@@ -327,8 +381,26 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
 }
 
 - (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView {
-    NSLog(@"[Yumi] web content process terminated, reloading");
+    NSDate *now = [NSDate date];
+    if (!self.lastCrashDate || [now timeIntervalSinceDate:self.lastCrashDate] > 30.0) {
+        self.crashCount = 0;
+    }
+    self.crashCount += 1;
+    self.lastCrashDate = now;
+
+    NSLog(@"[Yumi] web content process terminated (%ld)", (long)self.crashCount);
+    if (self.crashCount >= 2) {
+        // Do not get stuck in a reload/crash loop. Let the browser explain what
+        // happened and offer a safe way out (reload, Safari, disable WebP).
+        [self.delegate tab:self didTerminateWithURL:webView.URL ?: self.url];
+        return;
+    }
     [webView reload];
+}
+
+- (void)resetCrashGuard {
+    self.crashCount = 0;
+    self.lastCrashDate = nil;
 }
 
 #pragma mark - Стримы
