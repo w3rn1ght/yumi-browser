@@ -181,3 +181,14 @@
     Для таймаута выводится пояснение про возможную блокировку
     `release-assets.githubusercontent.com`.
   - Версия 1.0.6 / build 7.
+  - CI run `39986694277` — успешно. Проверено: IPA/deb содержат
+    `github-compat.js` с панелью «Репозитории», `polyfills.js`,
+    `anilibria-compat.js`, `webp-hero.js`, `webp-images.js`; версия
+    1.0.6 / build 7; MinimumOSVersion 12.0.
+  - Релиз v1.0.6 опубликован (tag `578dd19`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.6
+    `Yumi-1.0.6.deb` — 296812 байт, `Yumi-unsigned.ipa` — 362456 байт.
+  - Причина таймаута на устройстве, вероятно, блокировка
+    `release-assets.githubusercontent.com`; в приложении теперь есть
+    «Повторить»/«Скопировать ссылку» и таймаут 5 минут. Если сеть блокирует
+    хост, поможет VPN или загрузка на ПК.
