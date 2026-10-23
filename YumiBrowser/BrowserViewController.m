@@ -46,17 +46,30 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, copy) NSString *anilibriaPageID;
 @property (nonatomic, copy) NSDictionary *resumeInfo;
 
+@property (nonatomic, strong) UIAlertController *downloadAlert;
+@property (nonatomic, strong) NSURLSession *downloadSession;
+@property (nonatomic, strong) NSURLSessionDownloadTask *downloadTask;
+@property (nonatomic, strong) NSTimer *downloadTimer;
+@property (nonatomic, assign) BOOL downloadCancelled;
+@property (nonatomic, assign) NSUInteger downloadGeneration;
+
 - (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab;
 - (void)installCompatibilityStyleForTab:(YumiTab *)tab;
 - (void)downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename;
 - (void)promptDownloadURL;
 - (void)openGitHubReleases;
+- (void)openGitHubRepositories;
 - (void)startDownloadURL:(NSURL *)url
                filename:(NSString *)filename
                  pageURL:(NSURL *)pageURL
                   cookie:(NSString *)cookie
                userAgent:(NSString *)userAgent;
 - (void)presentDownloadedFile:(NSURL *)fileURL;
+- (void)presentDownloadAlertIfCurrent:(UIAlertController *)alert;
+- (void)dismissDownloadUIWithCompletion:(void (^)(void))completion;
+- (void)cancelDownload;
+- (void)updateDownloadProgress:(NSTimer *)timer;
+- (void)presentDownloadError:(NSError *)error url:(NSURL *)url filename:(NSString *)filename;
 - (void)updateIncognitoAppearance;
 - (void)setIncognitoMode:(BOOL)enable;
 
@@ -573,6 +586,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self promptDownloadURL]; }]];
     if ([host isEqualToString:@"github.com"] || [host isEqualToString:@"www.github.com"]) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Мои репозитории GitHub"
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *a) { [self openGitHubRepositories]; }]];
         [sheet addAction:[UIAlertAction actionWithTitle:@"Релизы GitHub"
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *a) { [self openGitHubReleases]; }]];
@@ -681,6 +697,29 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSURL *url = self.activeTab.url ?: [NSURL URLWithString:self.activeTab.displayURLString];
     if (!url) return;
     [[UIApplication sharedApplication] openURL:url];
+}
+
+- (void)openGitHubRepositories {
+    YumiTab *tab = self.activeTab;
+    NSURL *url = tab.webView.URL ?: tab.url;
+    NSString *host = url.host.lowercaseString;
+    if (![host isEqualToString:@"github.com"] && ![host isEqualToString:@"www.github.com"]) {
+        [self showToast:@"Открой страницу GitHub"];
+        return;
+    }
+
+    [tab.webView evaluateJavaScript:
+        @"(function(){var m=document.querySelector('meta[name=\"user-login\"]');"
+         "return m?(m.getAttribute('content')||''):'';})()"
+                  completionHandler:^(id result, __unused NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *login = [result isKindOfClass:[NSString class]] ? result : @"";
+            NSString *target = login.length
+                ? [NSString stringWithFormat:@"https://github.com/%@?tab=repositories", login]
+                : @"https://github.com/settings/repositories";
+            [tab loadURL:[NSURL URLWithString:target]];
+        });
+    }];
 }
 
 - (void)openGitHubReleases {
@@ -792,19 +831,40 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                   pageURL:(NSURL *)pageURL
                    cookie:(NSString *)cookie
                 userAgent:(NSString *)userAgent {
+    self.downloadGeneration += 1;
+    NSUInteger generation = self.downloadGeneration;
+    if (self.downloadTask) {
+        self.downloadCancelled = YES;
+        [self.downloadTask cancel];
+        [self.downloadSession invalidateAndCancel];
+        [self dismissDownloadUIWithCompletion:nil];
+    }
+
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.timeoutIntervalForRequest = 60.0;
-    config.timeoutIntervalForResource = 900.0;
+    config.timeoutIntervalForRequest = 300.0;
+    config.timeoutIntervalForResource = 1800.0;
     config.HTTPShouldSetCookies = NO;
     config.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
+
+    NSString *host = url.host.lowercaseString;
+    BOOL github = [host isEqualToString:@"github.com"] ||
+                  [host hasSuffix:@".github.com"] ||
+                  [host hasSuffix:@"githubusercontent.com"];
+    // GitHub's web session may keep serving an iOS-12-specific edge for the
+    // asset redirect. A desktop UA is harmless for a signed asset URL.
+    NSString *downloadUA = github
+        ? @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+           "(KHTML, like Gecko) Version/16.6 Safari/605.1.15"
+        : userAgent;
 
     NSMutableURLRequest *request =
         [NSMutableURLRequest requestWithURL:url
                                 cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                            timeoutInterval:60.0];
-    [request setValue:@"*/*" forHTTPHeaderField:@"Accept"];
+                            timeoutInterval:300.0];
+    [request setValue:(github ? @"application/octet-stream" : @"*/*")
+   forHTTPHeaderField:@"Accept"];
     [request setValue:@"ru-RU,ru;q=0.9,en;q=0.8" forHTTPHeaderField:@"Accept-Language"];
-    if (userAgent.length) [request setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+    if (downloadUA.length) [request setValue:downloadUA forHTTPHeaderField:@"User-Agent"];
     if (cookie.length) [request setValue:cookie forHTTPHeaderField:@"Cookie"];
     if (pageURL.absoluteString.length) [request setValue:pageURL.absoluteString forHTTPHeaderField:@"Referer"];
 
@@ -815,30 +875,34 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         [session downloadTaskWithRequest:request
                        completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
         [session finishTasksAndInvalidate];
+        if (generation != self.downloadGeneration) return;
+
+        [self.downloadTimer invalidate];
+        self.downloadTimer = nil;
+        if (self.downloadCancelled) {
+            [self dismissDownloadUIWithCompletion:nil];
+            return;
+        }
 
         if (error || !location) {
-            NSString *message = error.localizedDescription ?: @"Не удалось скачать файл";
-            UIAlertController *alert =
-                [UIAlertController alertControllerWithTitle:@"Ошибка скачивания"
-                                                    message:message
-                                             preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
-                                                      style:UIAlertActionStyleCancel
-                                                    handler:nil]];
-            [self presentController:alert];
+            NSError *downloadError = error ?: [NSError errorWithDomain:@"YumiDownload"
+                                                                  code:-1
+                                                              userInfo:@{NSLocalizedDescriptionKey: @"Не удалось скачать файл"}];
+            [self dismissDownloadUIWithCompletion:^{
+                [self presentDownloadError:downloadError url:url filename:filename];
+            }];
             return;
         }
 
         NSString *mime = [(response.MIMEType ?: @"") lowercaseString];
         if ([mime containsString:@"text/html"]) {
-            UIAlertController *alert =
-                [UIAlertController alertControllerWithTitle:@"Файл не скачан"
-                                                    message:@"Сервер вернул страницу вместо файла. Для приватного репозитория GitHub сначала войди в аккаунт."
-                                             preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
-                                                      style:UIAlertActionStyleCancel
-                                                    handler:nil]];
-            [self presentController:alert];
+            NSError *htmlError = [NSError errorWithDomain:@"YumiDownload"
+                                                     code:-2
+                                                 userInfo:@{NSLocalizedDescriptionKey:
+                    @"Сервер вернул страницу вместо файла. Для приватного репозитория GitHub сначала войди в аккаунт."}];
+            [self dismissDownloadUIWithCompletion:^{
+                [self presentDownloadError:htmlError url:url filename:filename];
+            }];
             return;
         }
 
@@ -884,21 +948,131 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             saved = [fm copyItemAtURL:location toURL:destinationURL error:&fileError];
         }
         if (!saved) {
-            UIAlertController *alert =
-                [UIAlertController alertControllerWithTitle:@"Не удалось сохранить файл"
-                                                    message:fileError.localizedDescription ?: @"Ошибка файловой системы"
-                                             preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"Ок"
-                                                      style:UIAlertActionStyleCancel
-                                                    handler:nil]];
-            [self presentController:alert];
+            NSError *saveError = fileError ?: [NSError errorWithDomain:@"YumiDownload"
+                                                                  code:-3
+                                                              userInfo:@{NSLocalizedDescriptionKey: @"Ошибка файловой системы"}];
+            [self dismissDownloadUIWithCompletion:^{
+                [self presentDownloadError:saveError url:url filename:filename];
+            }];
             return;
         }
 
-        [self showToast:[NSString stringWithFormat:@"Скачано: %@", destinationURL.lastPathComponent]];
-        [self presentDownloadedFile:destinationURL];
+        [self dismissDownloadUIWithCompletion:^{
+            [self showToast:[NSString stringWithFormat:@"Скачано: %@", destinationURL.lastPathComponent]];
+            [self presentDownloadedFile:destinationURL];
+        }];
     }];
+
+    self.downloadCancelled = NO;
+    self.downloadSession = session;
+    self.downloadTask = task;
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Скачивание файла"
+                                            message:@"Ожидание ответа…"
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(__unused UIAlertAction *action) {
+        [self cancelDownload];
+    }]];
+    self.downloadAlert = alert;
+    // Fast downloads should not flash a modal. Show the progress/cancel alert
+    // only if the transfer is still running after a second.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        if (self.downloadTask == task && self.downloadAlert == alert) {
+            [self presentDownloadAlertIfCurrent:alert];
+        }
+    });
+    self.downloadTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
+                                                         target:self
+                                                       selector:@selector(updateDownloadProgress:)
+                                                       userInfo:nil
+                                                        repeats:YES];
     [task resume];
+}
+
+- (void)presentDownloadAlertIfCurrent:(UIAlertController *)alert {
+    if (self.downloadAlert != alert) return;
+    UIViewController *presented = self.presentedViewController;
+    if (!presented) {
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    if ([presented isKindOfClass:[YumiPlayerViewController class]]) return;
+    [presented dismissViewControllerAnimated:YES completion:^{
+        if (self.downloadAlert == alert) {
+            [self presentViewController:alert animated:YES completion:nil];
+        }
+    }];
+}
+
+- (void)dismissDownloadUIWithCompletion:(void (^)(void))completion {
+    [self.downloadTimer invalidate];
+    self.downloadTimer = nil;
+    self.downloadTask = nil;
+    [self.downloadSession finishTasksAndInvalidate];
+    self.downloadSession = nil;
+
+    UIAlertController *alert = self.downloadAlert;
+    self.downloadAlert = nil;
+    if (alert && alert.presentingViewController) {
+        [alert dismissViewControllerAnimated:YES completion:^{
+            if (completion) completion();
+        }];
+    } else if (completion) {
+        completion();
+    }
+}
+
+- (void)cancelDownload {
+    self.downloadCancelled = YES;
+    [self.downloadTask cancel];
+    [self.downloadSession invalidateAndCancel];
+    [self dismissDownloadUIWithCompletion:^{
+        [self showToast:@"Скачивание отменено"];
+    }];
+}
+
+- (void)updateDownloadProgress:(NSTimer *)timer {
+    if (!timer || !self.downloadTask || !self.downloadAlert) return;
+    double progress = self.downloadTask.progress.fractionCompleted;
+    if (progress > 0.0 && progress <= 1.0) {
+        self.downloadAlert.message = [NSString stringWithFormat:@"Скачано %.0f%%", progress * 100.0];
+    } else {
+        self.downloadAlert.message = @"Ожидание ответа…";
+    }
+}
+
+- (void)presentDownloadError:(NSError *)error url:(NSURL *)url filename:(NSString *)filename {
+    NSString *message = error.localizedDescription ?: @"Не удалось скачать файл";
+    if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorTimedOut) {
+        message = @"Превышен таймаут загрузки. GitHub мог заблокировать release-assets.githubusercontent.com. "
+                   "Попробуй VPN, повтори загрузку или скопируй ссылку и скачай файл на ПК.";
+    }
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Ошибка скачивания"
+                                            message:message
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Повторить"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        [self downloadURL:url suggestedFilename:filename];
+    }]];
+    if (url.absoluteString.length) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать ссылку"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [UIPasteboard generalPasteboard].string = url.absoluteString;
+            [self showToast:@"Ссылка скопирована"];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [self presentController:alert];
 }
 
 - (void)presentDownloadedFile:(NSURL *)fileURL {

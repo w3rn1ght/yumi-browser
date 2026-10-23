@@ -90,6 +90,22 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
         return a;
     }
 
+    function currentLogin() {
+        try {
+            var meta = document.querySelector('meta[name="user-login"]');
+            return meta ? (meta.getAttribute('content') || '').trim() : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function repositoriesURL() {
+        var login = currentLogin();
+        return login
+            ? 'https://github.com/' + login + '?tab=repositories'
+            : 'https://github.com/settings/repositories';
+    }
+
     function ensureBar() {
         var bar = document.getElementById('yumi-gh-bar');
         if (!bar) {
@@ -101,13 +117,42 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
         while (bar.firstChild) bar.removeChild(bar.firstChild);
 
         bar.appendChild(makeLink('https://github.com/', 'GitHub'));
+        bar.appendChild(makeLink(repositoriesURL(), 'Репозитории'));
 
         var isDotCom = location.hostname === 'github.com' || location.hostname === 'www.github.com';
         var match = location.pathname.match(/^\/([^\/]+)\/([^\/]+)/);
         if (isDotCom && match && !/^(login|signup|settings|notifications|explore|topics|collections|sponsors|marketplace|orgs|users|search|new|pulls|issues)$/.test(match[1])) {
             bar.appendChild(makeLink('https://github.com/' + match[1] + '/' + match[2] + '/releases', 'Релизы'));
         }
-        bar.appendChild(makeLink('https://github.com/login', 'Вход'));
+
+        var login = currentLogin();
+        if (login) {
+            bar.appendChild(makeLink('https://github.com/' + login, 'Профиль'));
+        } else {
+            bar.appendChild(makeLink('https://github.com/login', 'Вход'));
+        }
+    }
+
+    function installOldDesignFallback() {
+        if (window.__yumiOldDesignHooked) return;
+        window.__yumiOldDesignHooked = true;
+        document.addEventListener('click', function (event) {
+            var el = event.target;
+            while (el && el !== document.body) {
+                if (el.tagName === 'A' || el.tagName === 'BUTTON') break;
+                el = el.parentNode;
+            }
+            if (!el) return;
+            var text = (el.textContent || '').toLowerCase();
+            if (text.indexOf('old design') >= 0 ||
+                text.indexOf('switch to old') >= 0 ||
+                text.indexOf('старый дизайн') >= 0 ||
+                text.indexOf('старом дизайне') >= 0) {
+                event.preventDefault();
+                event.stopPropagation();
+                location.href = repositoriesURL();
+            }
+        }, true);
     }
 
     function apply() {
@@ -120,7 +165,8 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
                 style.textContent = CSS;
                 (document.head || document.documentElement).appendChild(style);
             }
-            if (broken) ensureBar();
+            ensureBar();
+            installOldDesignFallback();
         } catch (e) {}
     }
 
