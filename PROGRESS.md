@@ -136,3 +136,26 @@
   - Релиз v1.0.4 опубликован (tag `72ff175`):
     https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.4
     `Yumi-1.0.4.deb` — 289828 байт, `Yumi-unsigned.ipa` — 353142 байта.
+- 23.10.2026: v1.0.5 — best-effort восстановление капч на iOS 12.
+  - `polyfills.js` теперь внедряется всегда, а не только при включённом
+    перехвате потоков: капчи и современные сайты зависят от этих API.
+  - Добавлены недостающие API, которые используют reCAPTCHA/hCaptcha/
+    Turnstile/SmartCaptcha: `AggregateError`, `PointerEvent`, `Touch`,
+    `visualViewport`, `screen.orientation`, `document.fonts`,
+    `PerformanceObserver`, `ReportingObserver`, `createImageBitmap`,
+    `OffscreenCanvas`, `AbortSignal.timeout`, `WebAssembly.*Streaming`,
+    `CSS.escape`, `Element.animate`/`getAnimations`/`append`/`before`/
+    `replaceChildren`, `HTMLFormElement.requestSubmit`, `navigator.permissions`/
+    `mediaDevices`/`connection`/`deviceMemory`, итераторы для
+    `NodeList`/`HTMLCollection`/`DOMTokenList`, `structuredClone` с Map/Set/
+    ArrayBuffer.
+  - `WKPreferences` включает WebGL приватными селекторами, если они есть
+    (капчи и fingerprint-скрипты ожидают WebGL).
+  - Правила блокировки: `yumi-ads-v3` с `ignore-previous-rules` для
+    recaptcha/gstatic/challenges.cloudflare.com/hcaptcha/yandexcloud и
+    yandex/checkcaptcha, чтобы косметика и хосты не ломали капчу.
+  - Проверено в Chromium с удалёнными API: полифиллы не падают, виджеты
+    reCAPTCHA (v2), hCaptcha и Turnstile создают iframe и API.
+  - Ограничение: Cloudflare Turnstile и Google-вход всё равно могут требовать
+    функций, которых нет в WebKit 12; это не гарантируется.
+  - Версия 1.0.5 / build 6.

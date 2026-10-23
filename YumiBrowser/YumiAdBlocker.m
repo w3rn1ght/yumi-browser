@@ -1,6 +1,6 @@
 #import "YumiAdBlocker.h"
 
-static NSString *const kYumiRuleID = @"yumi-ads-v2";
+static NSString *const kYumiRuleID = @"yumi-ads-v3";
 
 @interface YumiAdBlocker ()
 @property (nonatomic, strong, readwrite) WKContentRuleList *ruleList;
@@ -73,6 +73,28 @@ static NSString *const kYumiRuleID = @"yumi-ads-v2";
         @"trigger": @{ @"url-filter": @"^https?://[^/]+/([^/]+/)*(vast|preroll|pre-roll)\\.xml" },
         @"action": @{ @"type": @"block" }
     }];
+
+    // Captcha providers must never be caught by a broad cosmetic/ad rule.
+    // ignore-previous-rules is supported since iOS 11.2 and wins over the
+    // host rules above when a captcha asset happens to share a blocked host.
+    NSArray<NSString *> *captchaPatterns = @[
+        @"^https?://([^/]+\\.)?google\\.com/recaptcha/",
+        @"^https?://([^/]+\\.)?gstatic\\.com/recaptcha/",
+        @"^https?://([^/]+\\.)?recaptcha\\.net/",
+        @"^https?://([^/]+\\.)?challenges\\.cloudflare\\.com/",
+        @"^https?://([^/]+\\.)?hcaptcha\\.com/",
+        @"^https?://([^/]+\\.)?yandexcloud\\.net/",
+        @"^https?://([^/]+\\.)?yandex\\.ru/(captcha|checkcaptcha)",
+        @"^https?://([^/]+\\.)?yandex\\.com/(captcha|checkcaptcha)",
+        @"^https?://([^/]+\\.)?ya\\.ru/(captcha|checkcaptcha)"
+    ];
+    for (NSString *pattern in captchaPatterns) {
+        [rules addObject:@{
+            @"trigger": @{ @"url-filter": pattern },
+            @"action": @{ @"type": @"ignore-previous-rules" }
+        }];
+    }
+
     NSData *data = [NSJSONSerialization dataWithJSONObject:rules options:0 error:nil];
     if (!data) return @"[]";
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"[]";

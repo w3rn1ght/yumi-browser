@@ -24,6 +24,27 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     }
 }
 
+static void YumiEnableWebGL(WKPreferences *prefs) {
+    if (!prefs) return;
+    for (NSString *name in @[@"_setWebGLEnabled:", @"_setWebGL2Enabled:"]) {
+        SEL sel = NSSelectorFromString(name);
+        if (![prefs respondsToSelector:sel]) continue;
+        @try {
+            NSMethodSignature *sig = [prefs methodSignatureForSelector:sel];
+            if (!sig || sig.numberOfArguments < 3) continue;
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            inv.target = prefs;
+            inv.selector = sel;
+            BOOL yes = YES;
+            [inv setArgument:&yes atIndex:2];
+            [inv invoke];
+            NSLog(@"[Yumi] %@ enabled", name);
+        } @catch (NSException *e) {
+            NSLog(@"[Yumi] %@ failed: %@", name, e);
+        }
+    }
+}
+
 @interface YumiTab () <WKNavigationDelegate, WKUIDelegate>
 @property (nonatomic, strong, readwrite) WKWebView *webView;
 @property (nonatomic, assign) NSInteger crashCount;
@@ -44,13 +65,15 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     WKUserContentController *ucc = [[WKUserContentController alloc] init];
     [ucc addScriptMessageHandler:[YumiBridge shared] name:@"yumi"];
 
+    // Compatibility polyfills are needed even when stream capture is disabled:
+    // captcha widgets and modern sites probe APIs that WebKit 12 does not have.
+    NSString *poly = [YumiScripts polyfills];
+    if (poly.length) {
+        [ucc addUserScript:[[WKUserScript alloc] initWithSource:poly
+                                                   injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                                                forMainFrameOnly:NO]];
+    }
     if (settings.mediaHookEnabled) {
-        NSString *poly = [YumiScripts polyfills];
-        if (poly.length) {
-            [ucc addUserScript:[[WKUserScript alloc] initWithSource:poly
-                                                       injectionTime:WKUserScriptInjectionTimeAtDocumentStart
-                                                    forMainFrameOnly:NO]];
-        }
         NSString *hook = [YumiScripts hook];
         if (hook.length) {
             [ucc addUserScript:[[WKUserScript alloc] initWithSource:hook
@@ -76,6 +99,9 @@ static void YumiDisableITP(WKWebsiteDataStore *store) {
     cfg.suppressesIncrementalRendering = NO;
     cfg.dataDetectorTypes = WKDataDetectorTypeNone;
     YumiDisableITP(cfg.websiteDataStore);
+    // Some captcha/fingerprint widgets expect WebGL. WKWebView may keep it off
+    // even when Safari has it; the selector is private but harmless if absent.
+    YumiEnableWebGL(cfg.preferences);
     return cfg;
 }
 
