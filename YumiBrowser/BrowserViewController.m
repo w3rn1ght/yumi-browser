@@ -751,6 +751,15 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self presentController:alert];
 }
 
+- (void)downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename {
+    YumiTab *tab = self.activeTab;
+    if (!tab) {
+        [self showToast:@"Нет активной вкладки"];
+        return;
+    }
+    [self tab:tab downloadURL:url suggestedFilename:filename];
+}
+
 - (void)tab:(YumiTab *)tab downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename {
     if (!url) return;
     if (!tab) tab = self.activeTab;
