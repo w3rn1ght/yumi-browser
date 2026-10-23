@@ -100,3 +100,6 @@
   выбор качества CVH из `mpeg*Url` (кнопка появляется, даже если HLS — media playlist),
   WebP-полифилл webp-hero для обложек AniLibria (лениво, видимые изображения,
   JPEG для крупных кадров). Версия 1.0.3 / build 4.
+  - CI run `39769680676` — успешно; релиз v1.0.3 с `Yumi-1.0.3.deb` (282700 байт)
+    и `Yumi-unsigned.ipa` (343301 байт) опубликован:
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.3
