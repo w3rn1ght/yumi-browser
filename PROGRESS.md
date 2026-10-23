@@ -159,3 +159,10 @@
   - Ограничение: Cloudflare Turnstile и Google-вход всё равно могут требовать
     функций, которых нет в WebKit 12; это не гарантируется.
   - Версия 1.0.5 / build 6.
+  - CI run `39973331528` — успешно. Проверено: IPA/deb содержат
+    обновлённый `polyfills.js` (32548 байт), `github-compat.js`,
+    `anilibria-compat.js`, `webp-hero.js`, `webp-images.js`; версия
+    1.0.5 / build 6; MinimumOSVersion 12.0.
+  - Релиз v1.0.5 опубликован (tag `5d19f04`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.5
+    `Yumi-1.0.5.deb` — 293956 байт, `Yumi-unsigned.ipa` — 358828 байт.
