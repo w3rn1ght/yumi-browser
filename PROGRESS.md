@@ -125,4 +125,14 @@
     «WebP-обложки AniLibria» в настройках. При повторном падении web-процесса
     показывается предупреждение с кнопкой «Без WebP-обложек» вместо
     бесконечной перезагрузки.
-  - версия 1.0.4 / build 5. CI и релиз — после проверки сборки.
+  - версия 1.0.4 / build 5.
+  - CI run `39955917922` — первая сборка упала: приватный helper
+    `downloadURL:suggestedFilename:` был объявлен, но не реализован;
+    исправлено в коммите `72ff175`.
+  - CI run `39956449034` — успешно. Проверено: IPA/deb содержат
+    `github-compat.js`, `anilibria-compat.js`, `webp-hero.js`,
+    `webp-images.js`; версия 1.0.4 / build 5; MinimumOSVersion 12.0;
+    `UIFileSharingEnabled` включён.
+  - Релиз v1.0.4 опубликован (tag `72ff175`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.4
+    `Yumi-1.0.4.deb` — 289828 байт, `Yumi-unsigned.ipa` — 353142 байта.
