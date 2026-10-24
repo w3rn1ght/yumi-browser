@@ -120,6 +120,40 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
     return NO;
 }
 
++ (NSArray<NSString *> *)downloadableExtensions {
+    static NSArray *extensions = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        extensions = @[@"deb", @"ipa", @"apk", @"apks", @"xapk", @"dmg", @"pkg",
+                       @"exe", @"msi", @"zip", @"7z", @"rar", @"tar", @"gz",
+                       @"tgz", @"xz", @"bz2", @"iso", @"img", @"bin", @"torrent",
+                       @"epub", @"mobi", @"fb2", @"cbz", @"cbr", @"djvu"];
+    });
+    return extensions;
+}
+
++ (BOOL)isDownloadableURL:(NSURL *)url {
+    if (![url isKindOfClass:[NSURL class]]) return NO;
+    NSString *scheme = url.scheme.lowercaseString;
+    if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return NO;
+    return [[self downloadableExtensions] containsObject:url.pathExtension.lowercaseString];
+}
+
++ (BOOL)isLikelyDownloadPage:(NSURL *)url {
+    if (![url isKindOfClass:[NSURL class]]) return NO;
+    if ([self isDirectMediaURL:url] || [self isDownloadableURL:url]) return NO;
+    NSString *scheme = url.scheme.lowercaseString;
+    if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return NO;
+    NSString *path = url.path.lowercaseString;
+    NSString *query = url.query.lowercaseString ?: @"";
+    if ([path containsString:@"/download"]) return YES;
+    if ([path containsString:@"/dwn/"]) return YES;
+    if ([path containsString:@"/dl/"]) return YES;
+    if ([query containsString:@"download="]) return YES;
+    if ([query containsString:@"file="]) return YES;
+    return NO;
+}
+
 - (instancetype)initWithConfiguration:(WKWebViewConfiguration *)configuration
                              delegate:(id<YumiTabDelegate>)delegate {
     if ((self = [super init])) {
@@ -298,6 +332,15 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
         return;
     }
 
+    // Direct file links are handed to the native downloader. This also covers
+    // links that sites open in a new window with target=_blank.
+    if ([YumiTab isDownloadableURL:url] &&
+        (navigationAction.targetFrame == nil || navigationAction.targetFrame.isMainFrame)) {
+        decisionHandler(WKNavigationActionPolicyCancel);
+        [self.delegate tab:self downloadURL:url suggestedFilename:nil];
+        return;
+    }
+
     decisionHandler(WKNavigationActionPolicyAllow);
 }
 
@@ -357,9 +400,7 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
     // attachments would otherwise open as a blank page, so hand them to the
     // native downloader instead.
     NSString *ext = responseURL.pathExtension.lowercaseString;
-    NSSet *downloadExtensions = [NSSet setWithArray:@[@"deb", @"ipa", @"dmg", @"pkg", @"apk",
-                                                      @"zip", @"7z", @"rar", @"tar", @"gz", @"xz",
-                                                      @"bz2", @"tgz", @"iso"]];
+    NSSet *downloadExtensions = [NSSet setWithArray:[YumiTab downloadableExtensions]];
     BOOL downloadExtension = ext.length && [downloadExtensions containsObject:ext];
     BOOL cannotShow = !navigationResponse.canShowMIMEType;
     if (isHTTP && (downloadExtension || cannotShow || githubAsset)) {

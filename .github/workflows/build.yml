@@ -61,13 +61,13 @@ jobs:
             fi
           fi
           ls -la "$APP"
-          for resource in webp-hero.js webp-images.js github-compat.js anilibria-compat.js; do
+          for resource in webp-hero.js webp-images.js github-compat.js anilibria-compat.js download-links.js; do
             if [ ! -f "$APP/$resource" ]; then
               echo "::error::Missing bundled resource: $resource"
               exit 1
             fi
           done
-          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.7.deb
+          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.8.deb
 
       - name: Make unsigned IPA
         run: |
@@ -83,6 +83,6 @@ jobs:
         with:
           name: Yumi-packages
           path: |
-            packages/Yumi-1.0.7.deb
+            packages/Yumi-1.0.8.deb
             build/Yumi-unsigned.ipa
           if-no-files-found: error

@@ -9,5 +9,6 @@
 + (NSString *)webpImages;
 + (NSString *)githubCompat;
 + (NSString *)anilibriaCompat;
++ (NSString *)downloadLinks;
 
 @end

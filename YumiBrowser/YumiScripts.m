@@ -28,5 +28,6 @@
 + (NSString *)webpImages { return [self stringFromResource:@"webp-images" extension:@"js"]; }
 + (NSString *)githubCompat { return [self stringFromResource:@"github-compat" extension:@"js"]; }
 + (NSString *)anilibriaCompat { return [self stringFromResource:@"anilibria-compat" extension:@"js"]; }
++ (NSString *)downloadLinks { return [self stringFromResource:@"download-links" extension:@"js"]; }
 
 @end

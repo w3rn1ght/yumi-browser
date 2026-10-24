@@ -7,6 +7,7 @@
 #import "YumiScripts.h"
 #import "TabsViewController.h"
 #import "SettingsViewController.h"
+#import "GitHubSearchViewController.h"
 #import "YumiYummyResolver.h"
 #import "YummyEpisodesViewController.h"
 #import "YumiSiteStore.h"
@@ -16,7 +17,7 @@
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
-@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate>
+@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate, GitHubSearchViewControllerDelegate>
 
 @property (nonatomic, strong) NSMutableArray<YumiTab *> *tabs;
 @property (nonatomic, assign) NSInteger activeIndex;
@@ -60,14 +61,16 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)promptDownloadURL;
 - (void)openGitHubReleases;
 - (void)openGitHubRepositories;
+- (void)showGitHubSearch;
+- (void)promptGitHubProfileWithLogin:(NSString *)login;
 - (void)openDownloadsInFilza;
+- (void)scanPageForDownloads;
 - (void)handleGitHubAssetsMessage:(NSDictionary *)message fromWebView:(WKWebView *)webView;
 - (void)startDownloadURL:(NSURL *)url
                filename:(NSString *)filename
                  pageURL:(NSURL *)pageURL
                   cookie:(NSString *)cookie
                userAgent:(NSString *)userAgent;
-- (void)presentDownloadedFile:(NSURL *)fileURL;
 - (void)presentDownloadAlertIfCurrent:(UIAlertController *)alert;
 - (void)dismissDownloadUIWithCompletion:(void (^)(void))completion;
 - (void)cancelDownload;
@@ -597,10 +600,19 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [sheet addAction:[UIAlertAction actionWithTitle:@"Скачать файл по ссылке…"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self promptDownloadURL]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Скачать с этой страницы…"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self scanPageForDownloads]; }]];
     if ([host isEqualToString:@"github.com"] || [host isEqualToString:@"www.github.com"]) {
         [sheet addAction:[UIAlertAction actionWithTitle:@"Мои репозитории GitHub"
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *a) { [self openGitHubRepositories]; }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Поиск на GitHub…"
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *a) { [self showGitHubSearch]; }]];
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Открыть профиль GitHub…"
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *a) { [self promptGitHubProfileWithLogin:nil]; }]];
         [sheet addAction:[UIAlertAction actionWithTitle:@"Релизы GitHub"
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *a) { [self openGitHubReleases]; }]];
@@ -734,6 +746,79 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }];
 }
 
+- (void)scanPageForDownloads {
+    YumiTab *tab = self.activeTab;
+    NSString *script = [YumiScripts downloadLinks];
+    if (!tab || !script.length) {
+        [self showToast:@"Нет активной страницы"];
+        return;
+    }
+
+    [tab.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error || ![result isKindOfClass:[NSString class]]) {
+                [self showToast:@"Не удалось прочитать страницу"];
+                return;
+            }
+            NSData *data = [(NSString *)result dataUsingEncoding:NSUTF8StringEncoding];
+            id root = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            if (![root isKindOfClass:[NSArray class]] || ![root count]) {
+                [self showToast:@"Ссылки для скачивания не найдены"];
+                return;
+            }
+
+            NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
+            for (id raw in (NSArray *)root) {
+                if (![raw isKindOfClass:[NSDictionary class]]) continue;
+                NSDictionary *dict = (NSDictionary *)raw;
+                NSString *urlString = dict[@"url"];
+                if (![urlString isKindOfClass:[NSString class]]) continue;
+                NSURL *url = [NSURL URLWithString:urlString];
+                if (!url) continue;
+                NSString *scheme = url.scheme.lowercaseString;
+                if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) continue;
+                NSString *name = dict[@"name"];
+                if (![name isKindOfClass:[NSString class]] || !name.length) name = url.lastPathComponent;
+                BOOL isFile = [dict[@"file"] boolValue];
+                [items addObject:@{@"url": url, @"name": name, @"file": @(isFile)}];
+            }
+
+            if (!items.count) {
+                [self showToast:@"Ссылки для скачивания не найдены"];
+                return;
+            }
+
+            UIAlertController *sheet =
+                [UIAlertController alertControllerWithTitle:@"Скачать с этой страницы"
+                                                    message:@"Выбери файл или страницу загрузки"
+                                             preferredStyle:UIAlertControllerStyleActionSheet];
+            for (NSDictionary *item in items) {
+                NSDictionary *captured = item;
+                NSString *title = item[@"name"];
+                if (title.length > 72) title = [[title substringToIndex:69] stringByAppendingString:@"…"];
+                if (![item[@"file"] boolValue]) title = [title stringByAppendingString:@" — открыть страницу"];
+                [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                          style:UIAlertActionStyleDefault
+                                                        handler:^(__unused UIAlertAction *action) {
+                    if ([captured[@"file"] boolValue]) {
+                        [self tab:tab downloadURL:captured[@"url"]
+                                suggestedFilename:captured[@"name"]];
+                    } else {
+                        [self addTabWithURLString:[captured[@"url"] absoluteString]];
+                    }
+                }]];
+            }
+            [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                                      style:UIAlertActionStyleCancel
+                                                    handler:nil]];
+            sheet.popoverPresentationController.sourceView = self.view;
+            sheet.popoverPresentationController.sourceRect =
+                CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+            [self presentController:sheet];
+        });
+    }];
+}
+
 - (void)handleGitHubAssetsMessage:(NSDictionary *)message fromWebView:(WKWebView *)webView {
     YumiTab *tab = [self tabForWebView:webView] ?: self.activeTab;
     if (!tab) return;
@@ -840,6 +925,57 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
+    [self presentController:alert];
+}
+
+- (void)showGitHubSearch {
+    GitHubSearchViewController *vc =
+        [[GitHubSearchViewController alloc] initWithStyle:UITableViewStylePlain];
+    vc.delegate = self;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentController:nav];
+}
+
+- (void)gitHubSearchController:(GitHubSearchViewController *)controller openURL:(NSURL *)url {
+    [controller dismissViewControllerAnimated:YES completion:^{
+        if (url) [self addTabWithURLString:url.absoluteString];
+    }];
+}
+
+- (void)promptGitHubProfileWithLogin:(NSString *)login {
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Профиль GitHub"
+                                            message:@"Имя пользователя или организации"
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.text = login ?: @"";
+        field.placeholder = @"например, torvalds";
+        field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        field.autocorrectionType = UITextAutocorrectionTypeNo;
+        field.keyboardType = UIKeyboardTypeWebSearch;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Открыть"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        NSString *name = alert.textFields.firstObject.text ?: @"";
+        name = [name stringByTrimmingCharactersInSet:
+                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if ([name hasPrefix:@"@"]) name = [name substringFromIndex:1];
+        NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
+            @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._"];
+        NSCharacterSet *bad = [allowed invertedSet];
+        if (!name.length || [name rangeOfCharacterFromSet:bad].location != NSNotFound) {
+            [self showToast:@"Некорректное имя профиля"];
+            return;
+        }
+        NSString *urlString = [NSString stringWithFormat:@"https://github.com/%@", name];
+        [self addTabWithURLString:urlString];
+    }]];
     [self presentController:alert];
 }
 
@@ -1080,7 +1216,6 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 
         [self dismissDownloadUIWithCompletion:^{
             [self showToast:[NSString stringWithFormat:@"Скачано: %@", destinationURL.lastPathComponent]];
-            [self presentDownloadedFile:destinationURL];
         }];
     }];
 
@@ -1182,6 +1317,13 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                             handler:^(__unused UIAlertAction *action) {
         [self downloadURL:url suggestedFilename:filename];
     }]];
+    if ([error.domain isEqualToString:@"YumiDownload"] && error.code == -2 && url) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть страницу"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [self addTabWithURLString:url.absoluteString];
+        }]];
+    }
     if (url.absoluteString.length) {
         [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать ссылку"
                                                   style:UIAlertActionStyleDefault
@@ -1194,16 +1336,6 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     [self presentController:alert];
-}
-
-- (void)presentDownloadedFile:(NSURL *)fileURL {
-    UIActivityViewController *activity =
-        [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
-                                          applicationActivities:nil];
-    activity.popoverPresentationController.sourceView = self.view;
-    activity.popoverPresentationController.sourceRect =
-        CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
-    [self presentController:activity];
 }
 
 - (void)showSettings {
@@ -1953,6 +2085,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         [tab loadHome];
     } else if ([type isEqualToString:@"github-assets"]) {
         [self handleGitHubAssetsMessage:message fromWebView:webView];
+    } else if ([type isEqualToString:@"github-search"]) {
+        [self showGitHubSearch];
+    } else if ([type isEqualToString:@"github-profile"]) {
+        NSString *login = message[@"login"];
+        [self promptGitHubProfileWithLogin:[login isKindOfClass:[NSString class]] ? login : nil];
     }
 }
 
@@ -2169,6 +2306,11 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         info[@"page"] = tab.webView.URL.absoluteString ?: (tab.url.absoluteString ?: @"");
         info[@"title"] = tab.title ?: @"";
         [self tab:tab didFindStreamInfo:info];
+        return nil;
+    }
+
+    if ([YumiTab isDownloadableURL:url]) {
+        [self tab:tab downloadURL:url suggestedFilename:nil];
         return nil;
     }
 

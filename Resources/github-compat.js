@@ -162,15 +162,17 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
         return out;
     }
 
+    function postNative(message) {
+        try { window.webkit.messageHandlers.yumi.postMessage(message); } catch (e) {}
+    }
+
     function sendAssets(assets, error) {
-        try {
-            window.webkit.messageHandlers.yumi.postMessage({
-                type: 'github-assets',
-                page: location.href,
-                assets: assets || [],
-                error: error || ''
-            });
-        } catch (e) {}
+        postNative({
+            type: 'github-assets',
+            page: location.href,
+            assets: assets || [],
+            error: error || ''
+        });
     }
 
     function scanAssets() {
@@ -283,9 +285,23 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
         }
         addAssetsButton(bar);
 
+        var search = makeLink('#', 'Поиск');
+        search.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            postNative({ type: 'github-search' });
+        });
+        bar.appendChild(search);
+
         var login = currentLogin();
         if (login) {
-            bar.appendChild(makeLink('https://github.com/' + login, 'Профиль'));
+            var profile = makeLink('#', 'Профиль…');
+            profile.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                postNative({ type: 'github-profile', login: login });
+            });
+            bar.appendChild(profile);
         } else {
             bar.appendChild(makeLink('https://github.com/login', 'Вход'));
         }
