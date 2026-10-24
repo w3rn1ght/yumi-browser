@@ -33,6 +33,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, strong) UIBarButtonItem *tabsItem;
 @property (nonatomic, strong) UIBarButtonItem *homeItem;
 @property (nonatomic, strong) UIBarButtonItem *streamsItem;
+@property (nonatomic, strong) UIBarButtonItem *downloadsItem;
 
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *streams;
 @property (nonatomic, strong) NSDictionary *streamInfo;
@@ -59,6 +60,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)promptDownloadURL;
 - (void)openGitHubReleases;
 - (void)openGitHubRepositories;
+- (void)openDownloadsInFilza;
+- (void)handleGitHubAssetsMessage:(NSDictionary *)message fromWebView:(WKWebView *)webView;
 - (void)startDownloadURL:(NSURL *)url
                filename:(NSString *)filename
                  pageURL:(NSURL *)pageURL
@@ -173,6 +176,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     self.tabsItem = [self itemWithImage:[YumiIcons tabs] action:@selector(showTabs) label:@"Вкладки"];
     self.homeItem = [self itemWithImage:[YumiIcons home] action:@selector(goHomeTapped) label:@"Начало"];
     self.streamsItem = [self itemWithImage:[YumiIcons streams] action:@selector(showStreamsList) label:@"Потоки"];
+    self.downloadsItem = [self itemWithImage:[YumiIcons download] action:@selector(openDownloadsInFilza) label:@"Загрузки"];
 
     UIBarButtonItem *(^flex)(void) = ^{
         return [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
@@ -180,8 +184,16 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                                              action:nil];
     };
 
+    // Keep the streams button centered: the invisible fixed space balances the
+    // new downloads button on the opposite side of the flexible layout.
+    UIBarButtonItem *balance =
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFixedSpace
+                                                       target:nil
+                                                       action:nil];
+    balance.width = 30.0;
     self.toolbarItems = @[self.backItem, flex(), self.forwardItem, flex(),
-                          self.streamsItem, flex(), self.tabsItem, flex(), self.homeItem];
+                          balance, flex(), self.streamsItem, flex(),
+                          self.downloadsItem, flex(), self.tabsItem, flex(), self.homeItem];
 }
 
 - (void)setupProgressView {
@@ -720,6 +732,115 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             [tab loadURL:[NSURL URLWithString:target]];
         });
     }];
+}
+
+- (void)handleGitHubAssetsMessage:(NSDictionary *)message fromWebView:(WKWebView *)webView {
+    YumiTab *tab = [self tabForWebView:webView] ?: self.activeTab;
+    if (!tab) return;
+
+    NSArray *rawAssets = message[@"assets"];
+    NSMutableArray<NSDictionary *> *assets = [NSMutableArray array];
+    if ([rawAssets isKindOfClass:[NSArray class]]) {
+        for (id item in rawAssets) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *dict = (NSDictionary *)item;
+            NSString *urlString = dict[@"url"];
+            if (![urlString isKindOfClass:[NSString class]] || !urlString.length) continue;
+            NSURL *url = [NSURL URLWithString:urlString];
+            if (!url) continue;
+            NSString *scheme = url.scheme.lowercaseString;
+            if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) continue;
+            NSString *name = dict[@"name"];
+            if (![name isKindOfClass:[NSString class]] || !name.length) {
+                name = url.lastPathComponent.length ? url.lastPathComponent : @"asset";
+            }
+            [assets addObject:@{@"url": url, @"name": name}];
+        }
+    }
+
+    if (!assets.count) {
+        NSString *error = message[@"error"];
+        [self showToast:([error isKindOfClass:[NSString class]] && error.length)
+            ? error : @"Ассеты не найдены"];
+        return;
+    }
+
+    UIAlertController *sheet =
+        [UIAlertController alertControllerWithTitle:@"Ассеты релиза"
+                                            message:@"Что скачать?"
+                                     preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSDictionary *asset in assets) {
+        NSDictionary *captured = asset;
+        NSString *title = asset[@"name"];
+        if (title.length > 72) {
+            title = [[title substringToIndex:69] stringByAppendingString:@"…"];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [self tab:tab downloadURL:captured[@"url"] suggestedFilename:captured[@"name"]];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect =
+        CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    [self presentController:sheet];
+}
+
+- (void)openDownloadsInFilza {
+    NSString *documents = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
+                                                               NSUserDomainMask, YES) firstObject];
+    if (!documents.length) {
+        [self showToast:@"Не удалось открыть папку загрузок"];
+        return;
+    }
+    NSString *directory = [documents stringByAppendingPathComponent:@"Downloads"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:directory
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+
+    NSString *encoded = [directory stringByAddingPercentEncodingWithAllowedCharacters:
+                         [NSCharacterSet URLPathAllowedCharacterSet]] ?: directory;
+    NSString *withoutLeadingSlash = [encoded hasPrefix:@"/"] ? [encoded substringFromIndex:1] : encoded;
+    NSArray<NSString *> *candidates = @[
+        [NSString stringWithFormat:@"filza://view%@", encoded],
+        [NSString stringWithFormat:@"filza://%@", withoutLeadingSlash],
+        @"filza://"
+    ];
+    for (NSString *candidate in candidates) {
+        NSURL *url = [NSURL URLWithString:candidate];
+        if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
+            [[UIApplication sharedApplication] openURL:url];
+            return;
+        }
+    }
+
+    UIAlertController *alert =
+        [UIAlertController alertControllerWithTitle:@"Filza не найдена"
+                                            message:[NSString stringWithFormat:@"Папка загрузок:\n%@", directory]
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать путь"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        [UIPasteboard generalPasteboard].string = directory;
+        [self showToast:@"Путь скопирован"];
+    }]];
+    NSURL *filesURL = [NSURL URLWithString:@"shareddocuments://"];
+    if (filesURL && [[UIApplication sharedApplication] canOpenURL:filesURL]) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть Файлы"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [[UIApplication sharedApplication] openURL:filesURL];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [self presentController:alert];
 }
 
 - (void)openGitHubReleases {
@@ -1830,6 +1951,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         [YumiSiteStore removeSiteAtIndex:index.integerValue];
         YumiTab *tab = [self tabForWebView:webView];
         [tab loadHome];
+    } else if ([type isEqualToString:@"github-assets"]) {
+        [self handleGitHubAssetsMessage:message fromWebView:webView];
     }
 }
 

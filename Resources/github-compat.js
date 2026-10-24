@@ -106,6 +106,163 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
             : 'https://github.com/settings/repositories';
     }
 
+    function releaseInfo() {
+        var m = location.pathname.match(/^\/([^\/]+)\/([^\/]+)\/releases(?:\/tag\/([^\/?#]+))?/);
+        if (!m) return null;
+        var tag = '';
+        if (m[3]) {
+            try { tag = decodeURIComponent(m[3]); } catch (e) { tag = m[3]; }
+        }
+        if (!tag) {
+            var links = document.querySelectorAll('a[href*="/releases/tag/"]');
+            for (var i = 0; i < links.length; i++) {
+                var hm = (links[i].getAttribute('href') || '').match(/\/releases\/tag\/([^\/?#]+)/);
+                if (hm) {
+                    try { tag = decodeURIComponent(hm[1]); } catch (e) { tag = hm[1]; }
+                    break;
+                }
+            }
+        }
+        return { owner: m[1], repo: m[2], tag: tag };
+    }
+
+    function addAsset(out, seen, href, name) {
+        if (!href) return;
+        if (href.indexOf('http') !== 0) {
+            href = location.origin + (href.charAt(0) === '/' ? '' : '/') + href;
+        }
+        if (href.indexOf('/releases/download/') < 0) return;
+        if (seen[href]) return;
+        seen[href] = 1;
+        if (!name) {
+            var clean = href.split('?')[0].split('#')[0];
+            name = clean.split('/').pop();
+            try { name = decodeURIComponent(name); } catch (e) {}
+        }
+        out.push({ url: href, name: name });
+    }
+
+    function assetsFromDOM() {
+        var out = [], seen = {};
+        var links = document.querySelectorAll('a[href*="/releases/download/"]');
+        for (var i = 0; i < links.length; i++) {
+            addAsset(out, seen, links[i].href || links[i].getAttribute('href'),
+                     (links[i].textContent || '').trim());
+        }
+        return out;
+    }
+
+    function parseAssetsHTML(html) {
+        var out = [], seen = {};
+        var re = /href="([^"]*\/releases\/download\/[^"]+)"/g;
+        var m;
+        while ((m = re.exec(html))) {
+            addAsset(out, seen, m[1].replace(/&amp;/g, '&'), '');
+        }
+        return out;
+    }
+
+    function sendAssets(assets, error) {
+        try {
+            window.webkit.messageHandlers.yumi.postMessage({
+                type: 'github-assets',
+                page: location.href,
+                assets: assets || [],
+                error: error || ''
+            });
+        } catch (e) {}
+    }
+
+    function scanAssets() {
+        if (window.__yumiAssetsScanning) return;
+        window.__yumiAssetsScanning = true;
+
+        var info = releaseInfo();
+        if (!info) {
+            window.__yumiAssetsScanning = false;
+            sendAssets([], 'Открой страницу релиза GitHub');
+            return;
+        }
+
+        var fromDOM = assetsFromDOM();
+        if (fromDOM.length) {
+            window.__yumiAssetsScanning = false;
+            sendAssets(fromDOM, '');
+            return;
+        }
+
+        var urls = [], seenURL = {};
+        var fragments = document.querySelectorAll('include-fragment[src*="expanded_assets"]');
+        for (var i = 0; i < fragments.length; i++) {
+            var src = fragments[i].src || fragments[i].getAttribute('src');
+            if (src && !seenURL[src]) {
+                seenURL[src] = 1;
+                urls.push(src);
+            }
+        }
+        if (!urls.length && info.tag) {
+            urls.push('/' + info.owner + '/' + info.repo +
+                      '/releases/expanded_assets/' + encodeURIComponent(info.tag));
+        }
+        if (!urls.length) {
+            urls.push('/' + info.owner + '/' + info.repo + '/releases/expanded_assets/latest');
+        }
+
+        var remaining = urls.length;
+        var all = [], seen = {};
+        var done = function () {
+            remaining -= 1;
+            if (remaining > 0) return;
+            window.__yumiAssetsScanning = false;
+            sendAssets(all, all.length ? '' : 'Ассеты не найдены');
+        };
+
+        for (var u = 0; u < urls.length; u++) {
+            (function (assetURL) {
+                try {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', assetURL, true);
+                    xhr.setRequestHeader('Accept', 'text/html');
+                    xhr.onload = function () {
+                        if (xhr.status >= 200 && xhr.status < 400) {
+                            var parsed = parseAssetsHTML(xhr.responseText || '');
+                            for (var k = 0; k < parsed.length; k++) {
+                                if (!seen[parsed[k].url]) {
+                                    seen[parsed[k].url] = 1;
+                                    all.push(parsed[k]);
+                                }
+                            }
+                        }
+                        done();
+                    };
+                    xhr.onerror = done;
+                    xhr.send();
+                } catch (e) {
+                    done();
+                }
+            })(urls[u]);
+        }
+    }
+
+    function addAssetsButton(bar) {
+        if (!releaseInfo()) return;
+        var a = makeLink('#', 'Скачать');
+        a.id = 'yumi-gh-assets';
+        a.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (a.getAttribute('data-busy') === '1') return;
+            a.setAttribute('data-busy', '1');
+            a.textContent = 'Ищу…';
+            scanAssets();
+            setTimeout(function () {
+                a.removeAttribute('data-busy');
+                a.textContent = 'Скачать';
+            }, 8000);
+        });
+        bar.appendChild(a);
+    }
+
     function ensureBar() {
         var bar = document.getElementById('yumi-gh-bar');
         if (!bar) {
@@ -124,6 +281,7 @@ html.yumi-gh-broken .react-directory-row-name-cell-large-screen{display:table-ce
         if (isDotCom && match && !/^(login|signup|settings|notifications|explore|topics|collections|sponsors|marketplace|orgs|users|search|new|pulls|issues)$/.test(match[1])) {
             bar.appendChild(makeLink('https://github.com/' + match[1] + '/' + match[2] + '/releases', 'Релизы'));
         }
+        addAssetsButton(bar);
 
         var login = currentLogin();
         if (login) {

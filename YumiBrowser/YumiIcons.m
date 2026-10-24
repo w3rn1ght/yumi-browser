@@ -175,4 +175,23 @@
     }];
 }
 
++ (UIImage *)download {
+    return [self draw:^(CGContextRef c, CGSize s) {
+        // Стрелка вниз.
+        CGContextMoveToPoint(c, 13, 4.5);
+        CGContextAddLineToPoint(c, 13, 16.5);
+        CGContextStrokePath(c);
+        CGContextMoveToPoint(c, 8, 11.5);
+        CGContextAddLineToPoint(c, 13, 16.5);
+        CGContextAddLineToPoint(c, 18, 11.5);
+        CGContextStrokePath(c);
+        // Лоток.
+        CGContextMoveToPoint(c, 6, 18.5);
+        CGContextAddLineToPoint(c, 6, 21);
+        CGContextAddLineToPoint(c, 20, 21);
+        CGContextAddLineToPoint(c, 20, 18.5);
+        CGContextStrokePath(c);
+    }];
+}
+
 @end

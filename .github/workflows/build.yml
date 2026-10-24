@@ -67,7 +67,7 @@ jobs:
               exit 1
             fi
           done
-          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.6.deb
+          dpkg-deb -b /tmp/debroot packages/Yumi-1.0.7.deb
 
       - name: Make unsigned IPA
         run: |
@@ -83,6 +83,6 @@ jobs:
         with:
           name: Yumi-packages
           path: |
-            packages/Yumi-1.0.6.deb
+            packages/Yumi-1.0.7.deb
             build/Yumi-unsigned.ipa
           if-no-files-found: error

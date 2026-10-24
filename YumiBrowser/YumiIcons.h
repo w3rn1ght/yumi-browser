@@ -14,5 +14,6 @@
 + (UIImage *)close;
 + (UIImage *)desktop;
 + (UIImage *)shield;
++ (UIImage *)download;
 
 @end
