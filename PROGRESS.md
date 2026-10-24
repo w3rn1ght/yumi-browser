@@ -205,3 +205,12 @@
   - Кнопка потоков осталась по центру: добавлен невидимый fixed space,
     балансирующий новую кнопку.
   - Версия 1.0.7 / build 8.
+  - CI run `40060277121` — успешно. Проверено: IPA/deb содержат
+    `github-compat.js` с `expanded_assets`/`github-assets`, новые схемы
+    `filza`/`shareddocuments`, версия 1.0.7 / build 8, MinimumOSVersion 12.0.
+  - Релиз v1.0.7 опубликован (tag `53695dd`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.7
+    `Yumi-1.0.7.deb` — 299752 байт, `Yumi-unsigned.ipa` — 366138 байт.
+  - Проверка сканера ассетов в Chromium: страница
+    `/Flowseal/zapret-discord-youtube/releases/tag/1.9.2` отдала оба ассета
+    (`.rar` и `.zip`) через `expanded_assets` и нативное сообщение.
