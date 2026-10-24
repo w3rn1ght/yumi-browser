@@ -39,6 +39,7 @@
 + (WKWebViewConfiguration *)configurationWithDataStore:(WKWebsiteDataStore *)store;
 + (BOOL)isDirectMediaURL:(NSURL *)url;
 + (BOOL)isDownloadableURL:(NSURL *)url;
++ (BOOL)isLikelyDownloadPage:(NSURL *)url;
 + (NSArray<NSString *> *)downloadableExtensions;
 
 - (instancetype)initWithConfiguration:(WKWebViewConfiguration *)configuration

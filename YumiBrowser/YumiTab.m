@@ -142,6 +142,8 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
 + (BOOL)isLikelyDownloadPage:(NSURL *)url {
     if (![url isKindOfClass:[NSURL class]]) return NO;
     if ([self isDirectMediaURL:url] || [self isDownloadableURL:url]) return NO;
+    if ([url.host.lowercaseString hasSuffix:@"github.com"] &&
+        [url.path.lowercaseString containsString:@"/releases/download/"]) return NO;
     NSString *scheme = url.scheme.lowercaseString;
     if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"]) return NO;
     NSString *path = url.path.lowercaseString;
@@ -213,14 +215,17 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
 #pragma mark - Загрузка
 
 - (void)applyUserAgent {
-    NSString *host = self.webView.URL.host ?: self.url.host;
+    NSURL *current = self.webView.URL ?: self.url;
+    NSString *host = current.host;
+    if ([YumiTab isLikelyDownloadPage:current]) host = @"mobdisc.com";
     self.webView.customUserAgent = [[YumiSettings shared] userAgentForHost:host];
 }
 
 - (void)loadURL:(NSURL *)url {
     if (!url) return;
     self.pendingURLString = nil;
-    [self applyUserAgent];
+    NSString *uaHost = [YumiTab isLikelyDownloadPage:url] ? @"mobdisc.com" : url.host;
+    self.webView.customUserAgent = [[YumiSettings shared] userAgentForHost:uaHost];
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url
                                                       cachePolicy:NSURLRequestUseProtocolCachePolicy
                                                   timeoutInterval:60.0];
@@ -318,6 +323,10 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
         NSLog(@"[Yumi] blocked nav: %@", url.host);
         decisionHandler(WKNavigationActionPolicyCancel);
         return;
+    }
+
+    if ([YumiTab isLikelyDownloadPage:url]) {
+        self.webView.customUserAgent = [[YumiSettings shared] userAgentForHost:@"mobdisc.com"];
     }
 
     if (![scheme isEqualToString:@"http"] && ![scheme isEqualToString:@"https"] &&

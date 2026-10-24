@@ -671,6 +671,18 @@
       };
     }
 
+    // Safari 12 predates the Storage Access API. ITP is disabled in Yumi, so
+    // storage is available; expose the API for widgets that feature-detect it.
+    if (typeof document !== 'undefined' && !document.hasStorageAccess) {
+      document.hasStorageAccess = function () { return Promise.resolve(true); };
+    }
+    if (typeof document !== 'undefined' && !document.requestStorageAccess) {
+      document.requestStorageAccess = function () { return Promise.resolve(); };
+    }
+    if (typeof g.crossOriginIsolated === 'undefined') {
+      g.crossOriginIsolated = false;
+    }
+
     if (typeof PointerEvent === 'undefined') {
       var PointerEventFallback = function (type, init) {
         var e = new MouseEvent(type, init || {});

@@ -244,3 +244,16 @@
     `Yumi-1.0.8.deb` — 306680 байт, `Yumi-unsigned.ipa` — 376127 байт.
   - Проверка сканера на локальной странице: `/dwn/123.html` определяется как
     страница (file=0), `/files/game.apk` — как файл (file=1).
+- 24.10.2026: v1.0.9 — совместимость Turnstile и кнопка Safari.
+  - Для `mobdisc.com` (страница проверки PDALIFE) и для страниц `/dwn/`,
+    `/download`, `/dl` браузер выставляет современный iPadOS 16.6 User-Agent
+    **до первого запроса** и на всех переходах/редиректах, включая popup.
+    Это не подделка токена: Cloudflare сам решает, проходить проверку или нет,
+    но перестаёт считать браузер заведомо старым.
+  - `loadURL`, `applyUserAgent` и navigation action учитывают
+    `isLikelyDownloadPage:`; для GitHub `/releases/download/` исключение.
+  - В полифилы добавлены `document.hasStorageAccess` /
+    `requestStorageAccess` (ITP в Yumi отключён, storage реально доступен) и
+    `crossOriginIsolated = false`.
+  - В окне ошибки загрузки добавлена кнопка **«Открыть в Safari»**.
+  - Версия 1.0.9 / build 10.

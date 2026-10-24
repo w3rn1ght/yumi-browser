@@ -1324,6 +1324,13 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             [self addTabWithURLString:url.absoluteString];
         }]];
     }
+    if (url) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть в Safari"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            [[UIApplication sharedApplication] openURL:url];
+        }]];
+    }
     if (url.absoluteString.length) {
         [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать ссылку"
                                                   style:UIAlertActionStyleDefault
@@ -2321,6 +2328,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }
 
     YumiTab *newTab = [self createTabWithConfiguration:configuration];
+    if ([YumiTab isLikelyDownloadPage:url]) {
+        newTab.webView.customUserAgent = [[YumiSettings shared] userAgentForHost:@"mobdisc.com"];
+    }
     [self.tabs addObject:newTab];
     [self selectTabAtIndex:(NSInteger)self.tabs.count - 1];
     return newTab.webView;
