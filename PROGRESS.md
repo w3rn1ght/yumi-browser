@@ -236,3 +236,11 @@
     prompt с именем пользователя, можно ввести любой чужой профиль.
     В меню — «Поиск на GitHub…» и «Открыть профиль GitHub…».
   - Версия 1.0.8 / build 9.
+  - CI run `40074390866` — успешно. Проверено: IPA/deb содержат
+    `download-links.js`, класс `GitHubSearchViewController` в бинарнике,
+    версия 1.0.8 / build 9, MinimumOSVersion 12.0.
+  - Релиз v1.0.8 опубликован (tag `0207b39`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.8
+    `Yumi-1.0.8.deb` — 306680 байт, `Yumi-unsigned.ipa` — 376127 байт.
+  - Проверка сканера на локальной странице: `/dwn/123.html` определяется как
+    страница (file=0), `/files/game.apk` — как файл (file=1).
