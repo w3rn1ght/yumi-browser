@@ -257,3 +257,9 @@
     `crossOriginIsolated = false`.
   - В окне ошибки загрузки добавлена кнопка **«Открыть в Safari»**.
   - Версия 1.0.9 / build 10.
+  - CI run `40078026677` — успешно. Проверено: IPA/deb содержат
+    `hasStorageAccess` в полифилах, строку `CPU OS 16_6` в бинарнике,
+    версия 1.0.9 / build 10, MinimumOSVersion 12.0.
+  - Релиз v1.0.9 опубликован (tag `e01240b`):
+    https://github.com/w3rn1ght/yumi-browser/releases/tag/v1.0.9
+    `Yumi-1.0.9.deb` — 307032 байта, `Yumi-unsigned.ipa` — 376510 байт.
