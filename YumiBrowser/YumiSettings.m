@@ -9,6 +9,7 @@ static NSString *const kYumiMediaHook = @"YumiMediaHook";
 static NSString *const kYumiWebPCovers = @"YumiWebPCovers";
 static NSString *const kYumiAlwaysShowQuality = @"YumiAlwaysShowQuality";
 static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
+static NSString *const kYumiCompatHosts = @"YumiCompatHosts";
 static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 @implementation YumiSettings
@@ -151,8 +152,43 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
     [[self defaults] setObject:d forKey:kYumiDesktopHosts];
 }
 
+#pragma mark - Режим совместимости
+
+- (NSMutableDictionary *)compatHosts {
+    NSDictionary *d = [[self defaults] dictionaryForKey:kYumiCompatHosts];
+    return d ? [d mutableCopy] : [NSMutableDictionary dictionary];
+}
+
+- (BOOL)isCompatModeForHost:(NSString *)host {
+    NSString *h = [self normalizedHost:host];
+    if (!h.length) return NO;
+    NSNumber *value = [self compatHosts][h];
+    return [value boolValue];
+}
+
+- (void)setCompatMode:(BOOL)enabled forHost:(NSString *)host {
+    NSString *h = [self normalizedHost:host];
+    if (!h.length) return;
+    NSMutableDictionary *d = [self compatHosts];
+    if (enabled) d[h] = @YES;
+    else [d removeObjectForKey:h];
+    [[self defaults] setObject:d forKey:kYumiCompatHosts];
+}
+
+/** UA старого Safari: сайты отдают ES5-бандлы, которые парсит WebKit 12. */
+- (NSString *)compatUA {
+    BOOL pad = ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad);
+    if (pad) {
+        return @"Mozilla/5.0 (iPad; CPU OS 10_3_3 like Mac OS X) AppleWebKit/603.3.8 "
+                "(KHTML, like Gecko) Version/10.0 Mobile/14G60 Safari/602.1";
+    }
+    return @"Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_3 like Mac OS X) AppleWebKit/603.3.8 "
+            "(KHTML, like Gecko) Version/10.0 Mobile/14G60 Safari/602.1";
+}
+
 - (NSString *)userAgentForHost:(NSString *)host {
     NSString *h = [self normalizedHost:host];
+    if ([self isCompatModeForHost:h]) return [self compatUA];
     if (self.uaMode == YumiUAModeCustom && self.customUA.length) return self.customUA;
     if ([self isDesktopForHost:h]) return [self desktopUA];
     return [self mobileUA];

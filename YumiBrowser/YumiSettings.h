@@ -27,6 +27,8 @@ typedef NS_ENUM(NSInteger, YumiSearchEngine) {
 
 - (NSString *)userAgentForHost:(NSString *)host;
 - (BOOL)isDesktopForHost:(NSString *)host;
+- (BOOL)isCompatModeForHost:(NSString *)host;
+- (void)setCompatMode:(BOOL)enabled forHost:(NSString *)host;
 - (void)setDesktop:(BOOL)desktop forHost:(NSString *)host;
 - (NSString *)searchEngineName;
 - (NSURL *)searchURLForQuery:(NSString *)query;

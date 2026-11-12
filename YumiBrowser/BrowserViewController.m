@@ -668,6 +668,10 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     [sheet addAction:[UIAlertAction actionWithTitle:@"Обновить"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self reloadTapped]; }]];
+    BOOL compat = host.length ? [[YumiSettings shared] isCompatModeForHost:host] : NO;
+    [sheet addAction:[UIAlertAction actionWithTitle:(compat ? @"Обычный режим сайта" : @"Режим совместимости (старый UA)")
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self toggleCompat]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:(desktop ? @"Мобильная версия сайта" : @"Полная версия сайта")
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self toggleDesktop]; }]];
@@ -785,6 +789,20 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
         ? [UIColor colorWithRed:0.945 green:0.918 blue:1.0 alpha:1.0]
         : [UIColor colorWithWhite:0.94 alpha:1.0];
     self.addressField.textColor = self.incognito ? privateTint : [UIColor blackColor];
+}
+
+- (void)toggleCompat {
+    YumiTab *tab = self.activeTab;
+    NSString *host = tab.webView.URL.host ?: tab.url.host;
+    if (!host.length) {
+        [self showToast:@"Сначала открой сайт"];
+        return;
+    }
+    BOOL enabled = [[YumiSettings shared] isCompatModeForHost:host];
+    [[YumiSettings shared] setCompatMode:!enabled forHost:host];
+    [tab applyUserAgent];
+    [tab reload];
+    [self showToast:(enabled ? @"Обычный режим" : @"Режим совместимости включён")];
 }
 
 - (void)toggleDesktop {
