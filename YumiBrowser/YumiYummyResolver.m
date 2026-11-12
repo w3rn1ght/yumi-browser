@@ -246,19 +246,14 @@ static void YumiResolveAttempt(NSArray<NSString *> *candidates,
     return fallback;
 }
 
-+ (void)resolveStreamWithAnimeID:(NSString *)animeID
-                         episode:(NSString *)episode
-                         dubbing:(NSString *)dubbing
-                      completion:(void (^)(NSURL *,
-                                           NSDictionary<NSString *, NSString *> *,
-                                           NSArray<NSDictionary<NSString *, NSString *> *> *,
-                                           NSString *,
-                                           NSError *))completion {
+#pragma mark - CVH
+
++ (void)fetchPlaylistWithAnimeID:(NSString *)animeID
+                        episode:(NSString *)episode
+                     completion:(void (^)(NSArray<NSDictionary *> *items,
+                                          NSNumber *resolvedEpisode,
+                                          NSError *error))completion {
     if (!completion) return;
-    if (!animeID.length || !episode.length) {
-        completion(nil, nil, nil, nil, YumiYummyError(@"Нет id аниме или номера серии", -4));
-        return;
-    }
 
     NSString *playlist = [NSString stringWithFormat:
         @"https://plapi.cdnvideohub.com/api/v1/player/sv/playlist?pub=745&aggr=mali&id=%@&ep=%@",
@@ -270,15 +265,89 @@ static void YumiResolveAttempt(NSArray<NSString *> *candidates,
     };
 
     YumiHTTPGET([NSURL URLWithString:playlist], apiHeaders, ^(id json, NSError *error) {
-        if (error) { completion(nil, nil, nil, nil, error); return; }
+        if (error) { completion(nil, nil, error); return; }
 
-        NSArray *items = [json isKindOfClass:[NSDictionary class]] ? ((NSDictionary *)json)[@"items"] : nil;
+        NSArray *items = [json isKindOfClass:[NSDictionary class]]
+            ? ((NSDictionary *)json)[@"items"] : nil;
         if (![items isKindOfClass:[NSArray class]] || !items.count) {
-            completion(nil, nil, nil, nil, YumiYummyError(@"CVH не вернул список озвучек", -5));
+            completion(nil, nil, YumiYummyError(@"CVH не вернул список озвучек", -5));
             return;
         }
 
-        NSDictionary *chosen = [self chooseItem:items dubbing:dubbing];
+        NSNumber *resolved = nil;
+        NSDictionary *first = items.firstObject;
+        if ([first isKindOfClass:[NSDictionary class]]) {
+            id value = first[@"episode"];
+            if ([value isKindOfClass:[NSNumber class]]) {
+                resolved = value;
+            } else if ([value isKindOfClass:[NSString class]]) {
+                resolved = @([value integerValue]);
+            }
+        }
+        completion(items, resolved, nil);
+    });
+}
+
+/**
+ * CVH нумерует серии со сдвигом (ep=1 и ep=2 отдают первую серию, ep=3 — вторую),
+ * поэтому сверяем поле episode в ответе и при расхождении переспрашиваем
+ * с поправкой, максимум два раза.
+ */
++ (void)resolveStreamWithAnimeID:(NSString *)animeID
+                         episode:(NSString *)episode
+                         dubbing:(NSString *)dubbing
+                         attempt:(NSInteger)attempt
+                         display:(NSString *)display
+                      completion:(void (^)(NSURL *,
+                                           NSDictionary<NSString *, NSString *> *,
+                                           NSArray<NSDictionary<NSString *, NSString *> *> *,
+                                           NSString *,
+                                           NSError *))completion {
+    if (!completion) return;
+    if (!animeID.length || !episode.length) {
+        completion(nil, nil, nil, nil, YumiYummyError(@"Нет id аниме или номера серии", -4));
+        return;
+    }
+
+    NSDictionary *apiHeaders = @{
+        @"Origin": @"https://player.cdnvideohub.com",
+        @"Referer": @"https://player.cdnvideohub.com/",
+        @"User-Agent": kYumiCVHUserAgent
+    };
+
+    [self fetchPlaylistWithAnimeID:animeID
+                           episode:episode
+                        completion:^(NSArray<NSDictionary *> *items, NSNumber *resolved, NSError *error) {
+        if (error) { completion(nil, nil, nil, nil, error); return; }
+
+        NSInteger wanted = episode.integerValue;
+        NSInteger got = resolved.integerValue;
+        if (resolved && wanted > 0 && got > 0 && got != wanted && attempt < 2) {
+            NSInteger corrected = wanted + (wanted - got);
+            if (corrected < 1) corrected = 1;
+            NSLog(@"[Yumi] CVH: ep=%@ вернул серию %@, переспрашиваем ep=%ld",
+                  episode, resolved, (long)corrected);
+            [self resolveStreamWithAnimeID:animeID
+                                   episode:[NSString stringWithFormat:@"%ld", (long)corrected]
+                                   dubbing:dubbing
+                                   attempt:attempt + 1
+                                   display:display
+                                completion:completion];
+            return;
+        }
+
+        NSMutableArray<NSDictionary *> *pool = [NSMutableArray array];
+        for (NSDictionary *item in items) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+            if (!resolved) { [pool addObject:item]; continue; }
+            id value = item[@"episode"];
+            NSInteger itemEpisode = [value respondsToSelector:@selector(integerValue)]
+                ? [value integerValue] : got;
+            if (itemEpisode == got) [pool addObject:item];
+        }
+        if (!pool.count) pool = [items mutableCopy];
+
+        NSDictionary *chosen = [self chooseItem:pool dubbing:dubbing];
         NSString *vkID = [chosen[@"vkId"] description];
         if (!vkID.length) {
             completion(nil, nil, nil, nil, YumiYummyError(@"CVH не вернул id видео", -6));
@@ -324,13 +393,13 @@ static void YumiResolveAttempt(NSArray<NSString *> *candidates,
             ];
             for (NSArray<NSString *> *pair in map) {
                 NSString *key = pair.firstObject;
-                NSString *title = pair.lastObject;
+                NSString *qualityTitle = pair.lastObject;
                 NSString *value = sources[key];
                 if (![value isKindOfClass:[NSString class]] || !value.length) continue;
-                if ([knownURLs containsObject:value] || [knownTitles containsObject:title]) continue;
+                if ([knownURLs containsObject:value] || [knownTitles containsObject:qualityTitle]) continue;
                 [knownURLs addObject:value];
-                [knownTitles addObject:title];
-                [qualities addObject:@{ @"title": title, @"url": value }];
+                [knownTitles addObject:qualityTitle];
+                [qualities addObject:@{ @"title": qualityTitle, @"url": value }];
             }
 
             NSString *stream = hls;
@@ -354,12 +423,29 @@ static void YumiResolveAttempt(NSArray<NSString *> *candidates,
                 @"User-Agent": kYumiCVHUserAgent
             };
 
+            NSString *shown = display.length ? display : (resolved ? [resolved stringValue] : episode);
             NSString *voice = chosen[@"voiceStudio"] ?: dubbing ?: @"";
-            NSString *title = [NSString stringWithFormat:@"Серия %@%@", episode,
+            NSString *title = [NSString stringWithFormat:@"Серия %@%@", shown,
                                voice.length ? [NSString stringWithFormat:@" · %@", voice] : @""];
             completion(url, headers, qualities, title, nil);
         });
-    });
+    }];
+}
+
++ (void)resolveStreamWithAnimeID:(NSString *)animeID
+                         episode:(NSString *)episode
+                         dubbing:(NSString *)dubbing
+                      completion:(void (^)(NSURL *,
+                                           NSDictionary<NSString *, NSString *> *,
+                                           NSArray<NSDictionary<NSString *, NSString *> *> *,
+                                           NSString *,
+                                           NSError *))completion {
+    [self resolveStreamWithAnimeID:animeID
+                           episode:episode
+                           dubbing:dubbing
+                           attempt:0
+                           display:episode
+                        completion:completion];
 }
 
 #pragma mark - Резолв по записи из списка серий
