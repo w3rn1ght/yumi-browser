@@ -175,8 +175,16 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
     [[self defaults] setObject:d forKey:kYumiCompatHosts];
 }
 
-/** UA старого Safari: сайты отдают ES5-бандлы, которые парсит WebKit 12. */
-- (NSString *)compatUA {
+/**
+ * UA старого Safari: сайты отдают ES5-бандлы, которые парсит WebKit 12.
+ * Для сайтов в полной версии берём настольный Safari 10 — у них самый полный
+ * legacy-бандл; для мобильных — iPad Safari 10.
+ */
+- (NSString *)compatUAForHost:(NSString *)host {
+    if ([self isDesktopForHost:host]) {
+        return @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/603.3.8 "
+                "(KHTML, like Gecko) Version/10.1.2 Safari/603.3.8";
+    }
     BOOL pad = ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad);
     if (pad) {
         return @"Mozilla/5.0 (iPad; CPU OS 10_3_3 like Mac OS X) AppleWebKit/603.3.8 "
@@ -188,7 +196,7 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 - (NSString *)userAgentForHost:(NSString *)host {
     NSString *h = [self normalizedHost:host];
-    if ([self isCompatModeForHost:h]) return [self compatUA];
+    if ([self isCompatModeForHost:h]) return [self compatUAForHost:h];
     if (self.uaMode == YumiUAModeCustom && self.customUA.length) return self.customUA;
     if ([self isDesktopForHost:h]) return [self desktopUA];
     return [self mobileUA];
