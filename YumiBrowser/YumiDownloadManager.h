@@ -12,6 +12,7 @@ extern NSString *const YumiDownloadDidFailNotification;
 @property (nonatomic, copy) NSString *destinationPath;
 @property (nonatomic, copy) NSString *pageURLString;
 @property (nonatomic, assign) double progress;        // 0.0 … 1.0
+@property (nonatomic, assign, readonly) BOOL started;
 @property (nonatomic, assign) BOOL finished;
 @property (nonatomic, assign) BOOL cancelled;
 @property (nonatomic, copy) NSString *errorMessage;
