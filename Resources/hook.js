@@ -5,6 +5,50 @@
   if (window.__yumiHooked) return;
   window.__yumiHooked = true;
 
+  /* ---- Cloudflare: не трогаем капчу вообще ----
+   * Cloudflare проверяет, что fetch/XHR — нативные функции. Любая обёртка в
+   * её фрейме выглядит как автоматизация, и челлендж не проходится.
+   */
+  function isChallengeContext() {
+    try {
+      var host = (location.hostname || '').toLowerCase();
+      if (/(^|\.)cloudflare\.com$/.test(host)) return true;
+      if (/(^|\.)cloudflareinsights\.com$/.test(host)) return true;
+      var path = (location.pathname || '').toLowerCase();
+      if (path.indexOf('/cdn-cgi/') === 0) return true;
+      if (document.querySelector) {
+        if (document.querySelector('#cf-challenge-running, #challenge-stage, #challenge-form')) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  if (isChallengeContext()) return;
+
+  /* ---- обёртки, неотличимые от нативных ----
+   * Сохраняем исходный Function.prototype.toString, чтобы проверки
+   * целостности (Cloudflare, антиботы) видели родной код.
+   */
+  var nativeToString = Function.prototype.toString;
+  var nativeSources = (typeof WeakMap === 'function') ? new WeakMap() : null;
+
+  function markNative(original, wrapper) {
+    try {
+      if (nativeSources) nativeSources.set(wrapper, nativeToString.call(original));
+      Object.defineProperty(wrapper, 'name', { value: original.name, configurable: true });
+      Object.defineProperty(wrapper, 'length', { value: original.length, configurable: true });
+    } catch (e) {}
+    return wrapper;
+  }
+
+  try {
+    if (nativeSources) {
+      Function.prototype.toString = markNative(nativeToString, function toString() {
+        var source = nativeSources.get(this);
+        return source || nativeToString.call(this);
+      });
+    }
+  } catch (e) {}
+
   var MAX_URL = 4096;
   var seen = Object.create(null);
 
@@ -74,52 +118,27 @@
   try {
     var nativeFetch = window.fetch;
     if (nativeFetch) {
-      window.fetch = function (input) {
+      window.fetch = markNative(nativeFetch, function (input) {
         try { checkUrl(input, 'fetch'); } catch (e) {}
         return nativeFetch.apply(this, arguments);
-      };
+      });
     }
   } catch (e) {}
 
   /* ---- XHR ---- */
   try {
     var nativeOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function (method, url) {
+    XMLHttpRequest.prototype.open = markNative(nativeOpen, function (method, url) {
       try { checkUrl(url, 'xhr'); } catch (e) {}
       return nativeOpen.apply(this, arguments);
-    };
+    });
   } catch (e) {}
 
-  /* ---- HTMLMediaElement.src ---- */
-  try {
-    var desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-    if (desc && desc.set && desc.get) {
-      Object.defineProperty(HTMLMediaElement.prototype, 'src', {
-        configurable: true,
-        enumerable: desc.enumerable,
-        get: desc.get,
-        set: function (v) { try { checkUrl(v, 'media.src'); } catch (e) {} return desc.set.call(this, v); }
-      });
-    }
-  } catch (e) {}
-
-  /* ---- setAttribute('src') для video/source ---- */
-  try {
-    var nativeSetAttr = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function (name, value) {
-      try {
-        if (String(name).toLowerCase() === 'src') {
-          var tag = this.tagName ? this.tagName.toLowerCase() : '';
-          if (tag === 'video' || tag === 'audio' || tag === 'source') checkUrl(value, 'setAttribute');
-        }
-      } catch (e) {}
-      return nativeSetAttr.apply(this, arguments);
-    };
-  } catch (e) {}
-
-  /* ---- window.open: нативные попапы обрабатывает WKUIDelegate ---- */
-
-  /* ---- сканирование DOM ---- */
+  /* ---- сканирование DOM ----
+   * Отдельные перехваты HTMLMediaElement.src и Element.setAttribute убраны:
+   * они заметны проверкам целостности и не нужны — потоки ловятся через
+   * fetch/XHR и регулярный обход DOM.
+   */
   function scan() {
     try {
       var list = document.querySelectorAll('video, audio, source');

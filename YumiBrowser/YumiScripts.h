@@ -10,5 +10,6 @@
 + (NSString *)githubCompat;
 + (NSString *)anilibriaCompat;
 + (NSString *)downloadLinks;
++ (NSString *)challengeWatchdog;
 
 @end

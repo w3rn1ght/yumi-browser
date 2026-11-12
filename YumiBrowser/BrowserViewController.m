@@ -1230,11 +1230,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
         }
     }
 
+    WKUserScript *watchdog = nil;
+    NSString *watchdogSource = [YumiScripts challengeWatchdog];
+    if (watchdogSource.length) {
+        watchdog = [[WKUserScript alloc] initWithSource:watchdogSource
+                                          injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
+                                       forMainFrameOnly:YES];
+    }
+
     for (YumiTab *tab in self.tabs) {
         WKUserContentController *ucc = tab.webView.configuration.userContentController;
         [ucc removeAllUserScripts];
         if (poly) [ucc addUserScript:poly];
         if (hook) [ucc addUserScript:hook];
+        if (watchdog) [ucc addUserScript:watchdog];
         [ucc removeAllContentRuleLists];
         if (settings.adblockEnabled && rules) [ucc addContentRuleList:rules];
         if (anilibriaRules) [ucc addContentRuleList:anilibriaRules];
@@ -1808,6 +1817,9 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     } else if ([type isEqualToString:@"github-profile"]) {
         NSString *login = message[@"login"];
         [self promptGitHubProfileWithLogin:[login isKindOfClass:[NSString class]] ? login : nil];
+    } else if ([type isEqualToString:@"cf"]) {
+        NSLog(@"[Yumi] CF challenge: page=%@ markers=%@ turnstile=%@ ua=%@",
+              message[@"page"], message[@"markers"], message[@"turnstile"], message[@"ua"]);
     }
 }
 

@@ -107,9 +107,16 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 - (NSString *)mobileUA {
     NSString *ver = [[UIDevice currentDevice] systemVersion] ?: @"12.0";
     NSString *under = [ver stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+    BOOL pad = ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad);
+    NSString *device = pad ? @"iPad" : @"iPhone";
+    NSString *cpu = pad ? @"CPU OS" : @"CPU iPhone OS";
+    // UA должен соответствовать реальному движку: Cloudflare и другие антиботы
+    // по UA выбирают версию скрипта. Если соврать про iOS 16, они пришлют
+    // современный бандл, который WebKit 12 не может даже распарсить.
     return [NSString stringWithFormat:
-            @"Mozilla/5.0 (iPhone; CPU iPhone OS %@ like Mac OS X) "
-            @"AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0 Mobile/15E148 Safari/604.1", under];
+            @"Mozilla/5.0 (%@; %@ %@ like Mac OS X) "
+            @"AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.0 Mobile/15E148 Safari/604.1",
+            device, cpu, under];
 }
 
 - (NSString *)desktopUA {
@@ -146,13 +153,6 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 - (NSString *)userAgentForHost:(NSString *)host {
     NSString *h = [self normalizedHost:host];
-    // MobDisc serves the PDALIFE download page and its Cloudflare Turnstile
-    // challenge. A modern iPadOS UA makes the challenge treat the session as a
-    // supported tablet browser; the token itself is still issued by Cloudflare.
-    if ([h isEqualToString:@"mobdisc.com"] || [h hasSuffix:@".mobdisc.com"]) {
-        return @"Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 "
-                "(KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1";
-    }
     if (self.uaMode == YumiUAModeCustom && self.customUA.length) return self.customUA;
     if ([self isDesktopForHost:h]) return [self desktopUA];
     return [self mobileUA];

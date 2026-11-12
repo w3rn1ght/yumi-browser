@@ -82,6 +82,15 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
         }
     }
 
+    // Диагностика Cloudflare: скрипт сам решает, есть ли на странице челлендж,
+    // и просто сообщает об этом приложению (никуда не вмешивается).
+    NSString *watchdog = [YumiScripts challengeWatchdog];
+    if (watchdog.length) {
+        [ucc addUserScript:[[WKUserScript alloc] initWithSource:watchdog
+                                                   injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
+                                                forMainFrameOnly:YES]];
+    }
+
     if (settings.adblockEnabled) {
         WKContentRuleList *rules = [YumiAdBlocker shared].ruleList;
         if (rules) [ucc addContentRuleList:rules];

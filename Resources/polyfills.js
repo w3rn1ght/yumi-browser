@@ -752,7 +752,8 @@
       }
       if (!navigator.deviceMemory) defineNav('deviceMemory', 4);
       if (navigator.maxTouchPoints === undefined) defineNav('maxTouchPoints', 5);
-      if (navigator.webdriver === undefined) defineNav('webdriver', false);
+      // navigator.webdriver не подставляем: на Safari 12 этого свойства нет,
+      // а его появление антиботы читают как признак автоматизации.
     }
 
     if (g.AbortSignal && !g.AbortSignal.timeout) {
