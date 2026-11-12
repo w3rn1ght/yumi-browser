@@ -1,4 +1,4 @@
-﻿#import "YumiSettings.h"
+#import "YumiSettings.h"
 #import <UIKit/UIKit.h>
 
 static NSString *const kYumiUAMode = @"YumiUAMode";
@@ -7,6 +7,7 @@ static NSString *const kYumiAdblock = @"YumiAdblock";
 static NSString *const kYumiAutoPlayer = @"YumiAutoPlayer";
 static NSString *const kYumiMediaHook = @"YumiMediaHook";
 static NSString *const kYumiWebPCovers = @"YumiWebPCovers";
+static NSString *const kYumiAlwaysShowQuality = @"YumiAlwaysShowQuality";
 static NSString *const kYumiDesktopHosts = @"YumiDesktopHosts";
 static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
@@ -63,6 +64,9 @@ static NSString *const kYumiSearchEngine = @"YumiSearchEngine";
 
 - (BOOL)webpCoversEnabled { return [[self defaults] boolForKey:kYumiWebPCovers]; }
 - (void)setWebpCoversEnabled:(BOOL)v { [[self defaults] setBool:v forKey:kYumiWebPCovers]; }
+
+- (BOOL)alwaysShowQuality { return [[self defaults] boolForKey:kYumiAlwaysShowQuality]; }
+- (void)setAlwaysShowQuality:(BOOL)v { [[self defaults] setBool:v forKey:kYumiAlwaysShowQuality]; }
 
 - (YumiSearchEngine)searchEngine {
     return (YumiSearchEngine)[[self defaults] integerForKey:kYumiSearchEngine];

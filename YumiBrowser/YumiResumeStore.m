@@ -21,6 +21,7 @@ static NSString *const kYumiResumePrefix = @"YumiResume_";
 + (void)saveForPageID:(NSString *)pageID
               animeID:(NSString *)animeID
               episode:(NSString *)episode
+         episodeParam:(NSString *)episodeParam
               dubbing:(NSString *)dubbing
                  time:(NSTimeInterval)time
              duration:(NSTimeInterval)duration
@@ -38,6 +39,7 @@ static NSString *const kYumiResumePrefix = @"YumiResume_";
     NSDictionary *dict = @{
         @"animeID": animeID,
         @"episode": episode,
+        @"episodeParam": episodeParam ?: @"",
         @"dubbing": dubbing ?: @"",
         @"time": @(time),
         @"duration": @(duration),

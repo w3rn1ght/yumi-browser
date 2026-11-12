@@ -8,6 +8,7 @@
 + (void)saveForPageID:(NSString *)pageID
               animeID:(NSString *)animeID
               episode:(NSString *)episode
+         episodeParam:(NSString *)episodeParam
               dubbing:(NSString *)dubbing
                  time:(NSTimeInterval)time
              duration:(NSTimeInterval)duration

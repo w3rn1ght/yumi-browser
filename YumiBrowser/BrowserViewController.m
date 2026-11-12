@@ -1476,6 +1476,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
             player.resumeKey = [resume[@"pageID"] description];
             player.animeID = [resume[@"animeID"] description];
             player.episode = [resume[@"episode"] description];
+            player.episodeParam = [resume[@"episodeParam"] description];
             player.dubbing = [resume[@"dubbing"] description];
             player.startTime = [resume[@"startTime"] doubleValue];
         }
@@ -1873,16 +1874,8 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                          void (^done)(NSURL *, NSDictionary<NSString *,NSString *> *,
                                       NSArray<NSDictionary<NSString *,NSString *> *> *,
                                       NSString *, NSError *)) {
-            [YumiYummyResolver resolveStreamWithAnimeID:[source[@"animeID"] description]
-                                                episode:episode
-                                                dubbing:[source[@"dubbing"] description]
-                                             completion:^(NSURL *url,
-                                                          NSDictionary<NSString *,NSString *> *headers,
-                                                          NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
-                                                          NSString *title,
-                                                          NSError *error) {
-                done(url, headers, qualities, title, error);
-            }];
+            (void)episode;
+            [YumiYummyResolver resolveStreamWithSource:source completion:done];
         };
     }
 
@@ -1920,17 +1913,23 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSString *dubbing = [resume[@"dubbing"] description] ?: @"";
     if (!animeID.length || !episode.length) return;
 
+    NSDictionary *source = @{
+        @"animeID": animeID,
+        @"number": episode,
+        @"epParam": [resume[@"episodeParam"] description] ?: episode,
+        @"dubbing": dubbing,
+        @"epShift": @(0)
+    };
+
     [self showToast:@"Загружаю видео…"];
 
     __weak typeof(self) weakSelf = self;
-    [YumiYummyResolver resolveStreamWithAnimeID:animeID
-                                        episode:episode
-                                        dubbing:dubbing
-                                     completion:^(NSURL *url,
-                                                  NSDictionary<NSString *,NSString *> *headers,
-                                                  NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
-                                                  NSString *title,
-                                                  NSError *error) {
+    [YumiYummyResolver resolveStreamWithSource:source
+                                    completion:^(NSURL *url,
+                                                 NSDictionary<NSString *,NSString *> *headers,
+                                                 NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
+                                                 NSString *title,
+                                                 NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
 

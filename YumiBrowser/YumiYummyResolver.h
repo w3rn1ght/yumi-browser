@@ -28,4 +28,19 @@
                                            NSString *title,
                                            NSError *error))completion;
 
+/**
+ * Резолв по записи из fetchEpisodesWithPageID:.
+ *
+ * Нумерация серий у сайта и у CVH не всегда совпадает (сайт отдаёт в iframe_url
+ * параметр episode, который может считать с нуля), поэтому здесь перебираются
+ * кандидаты: epParam → number → episode, а также соседние значения, пока CVH не
+ * вернёт поток. Ключ epShift (NSNumber) сдвигает номер вручную.
+ */
++ (void)resolveStreamWithSource:(NSDictionary *)source
+                     completion:(void (^)(NSURL *url,
+                                          NSDictionary<NSString *, NSString *> *headers,
+                                          NSArray<NSDictionary<NSString *, NSString *> *> *qualities,
+                                          NSString *title,
+                                          NSError *error))completion;
+
 @end

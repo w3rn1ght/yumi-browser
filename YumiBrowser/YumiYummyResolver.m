@@ -60,6 +60,58 @@ static NSString *YumiNormalize(NSString *string) {
     return out;
 }
 
+/** Строка состоит только из цифр (то есть это обычный номер серии). */
+static BOOL YumiIsDigits(NSString *string) {
+    if (![string isKindOfClass:[NSString class]] || !string.length) return NO;
+    for (NSUInteger i = 0; i < string.length; i++) {
+        unichar c = [string characterAtIndex:i];
+        if (c < '0' || c > '9') return NO;
+    }
+    return YES;
+}
+
+typedef void (^YumiStreamCompletion)(NSURL *url,
+                                     NSDictionary<NSString *, NSString *> *headers,
+                                     NSArray<NSDictionary<NSString *, NSString *> *> *qualities,
+                                     NSString *title,
+                                     NSError *error);
+
+/**
+ * Перебирает кандидатов номера серии, пока CVH не вернёт поток.
+ * Если ни один не подошёл — отдаёт последнюю ошибку.
+ */
+static void YumiResolveAttempt(NSArray<NSString *> *candidates,
+                               NSUInteger index,
+                               NSString *animeID,
+                               NSString *dubbing,
+                               YumiStreamCompletion completion) {
+    if (index >= candidates.count) {
+        completion(nil, nil, nil, nil, YumiYummyError(@"Для этой серии нет доступного потока", -9));
+        return;
+    }
+    NSString *episode = candidates[index];
+    [YumiYummyResolver resolveStreamWithAnimeID:animeID
+                                        episode:episode
+                                        dubbing:dubbing
+                                     completion:^(NSURL *url,
+                                                  NSDictionary<NSString *, NSString *> *headers,
+                                                  NSArray<NSDictionary<NSString *, NSString *> *> *qualities,
+                                                  NSString *title,
+                                                  NSError *error) {
+        if (url && !error) {
+            completion(url, headers, qualities, title, nil);
+            return;
+        }
+        if (index + 1 < candidates.count) {
+            NSLog(@"[Yumi] эпизод %@ не подошёл (%@), пробуем следующий",
+                  episode, error.localizedDescription);
+            YumiResolveAttempt(candidates, index + 1, animeID, dubbing, completion);
+            return;
+        }
+        completion(nil, nil, nil, nil, error ?: YumiYummyError(@"Для этой серии нет доступного потока", -9));
+    }];
+}
+
 @implementation YumiYummyResolver
 
 + (BOOL)isItemURL:(NSURL *)url {
@@ -108,19 +160,38 @@ static NSString *YumiNormalize(NSString *string) {
             }
 
             NSString *animeID = query[@"anime_id"];
-            NSString *episode = query[@"episode"] ?: [raw[@"number"] description];
-            if (!animeID.length || !episode.length) continue;
+            NSString *param = [query[@"episode"] description] ?: @"";
+            NSString *number = [raw[@"number"] isKindOfClass:[NSString class]]
+                ? raw[@"number"] : [raw[@"number"] description];
+            if (!number.length) number = param;
+            if (!animeID.length || (!param.length && !number.length)) continue;
 
             NSDictionary *data = [raw[@"data"] isKindOfClass:[NSDictionary class]] ? raw[@"data"] : @{};
             NSString *dubbing = [data[@"dubbing"] isKindOfClass:[NSString class]] ? data[@"dubbing"] : @"";
             NSString *player = [data[@"player"] isKindOfClass:[NSString class]] ? data[@"player"] : @"";
-            NSString *number = [raw[@"number"] isKindOfClass:[NSString class]]
-                ? raw[@"number"] : [raw[@"number"] description];
+
+            // Сайт может нумеровать серии с нуля (iframe_url?episode=0 для первой),
+            // а CVH ждёт номер с единицы. Поэтому в CVH отправляем number, а
+            // параметр сайта оставляем как запасной кандидат.
+            NSString *epParam = param;
+            if (YumiIsDigits(number) && number.integerValue > 0) {
+                epParam = number;
+            }
+            if (!epParam.length) epParam = number;
+
+            static NSUInteger logCount = 0;
+            if (logCount < 80) {
+                logCount++;
+                NSLog(@"[Yumi] episode: number=%@ param=%@ epParam=%@ dubbing=%@",
+                      number, param, epParam, dubbing);
+            }
 
             [result addObject:@{
                 @"animeID": animeID,
-                @"episode": episode,
-                @"number": number ?: episode,
+                @"episode": param,
+                @"number": number ?: epParam,
+                @"epParam": epParam ?: @"",
+                @"iframe": iframe ?: @"",
                 @"dubbing": dubbing,
                 @"player": player,
                 @"dubbingCode": query[@"dubbing_code"] ?: @"",
@@ -289,6 +360,59 @@ static NSString *YumiNormalize(NSString *string) {
             completion(url, headers, qualities, title, nil);
         });
     });
+}
+
+#pragma mark - Резолв по записи из списка серий
+
++ (void)resolveStreamWithSource:(NSDictionary *)source
+                     completion:(void (^)(NSURL *url,
+                                          NSDictionary<NSString *, NSString *> *headers,
+                                          NSArray<NSDictionary<NSString *, NSString *> *> *qualities,
+                                          NSString *title,
+                                          NSError *error))completion {
+    if (!completion) return;
+    if (![source isKindOfClass:[NSDictionary class]]) {
+        completion(nil, nil, nil, nil, YumiYummyError(@"Нет данных о серии", -4));
+        return;
+    }
+
+    NSString *animeID = [source[@"animeID"] description] ?: @"";
+    NSString *dubbing = [source[@"dubbing"] description] ?: @"";
+    NSInteger shift = [source[@"epShift"] integerValue];
+
+    NSMutableArray<NSString *> *candidates = [NSMutableArray array];
+
+    void (^addCandidate)(id) = ^(id value) {
+        NSString *text = [value description];
+        if (!text.length) return;
+        if (YumiIsDigits(text)) {
+            NSInteger number = text.integerValue + shift;
+            if (number < 0) number = 0;
+            text = [NSString stringWithFormat:@"%ld", (long)number];
+        }
+        if (![candidates containsObject:text]) [candidates addObject:text];
+    };
+
+    // Порядок важен: сначала номер, который видит пользователь, затем параметр
+    // сайта (может считать с нуля), затем соседние значения.
+    addCandidate(source[@"epParam"]);
+    addCandidate(source[@"number"]);
+    addCandidate(source[@"episode"]);
+
+    NSString *first = candidates.firstObject;
+    if (YumiIsDigits(first)) {
+        NSInteger base = first.integerValue;
+        addCandidate(@(base + 1));
+        if (base > 0) addCandidate(@(base - 1));
+    }
+
+    if (!candidates.count) {
+        completion(nil, nil, nil, nil, YumiYummyError(@"Не удалось определить номер серии", -4));
+        return;
+    }
+
+    NSLog(@"[Yumi] резолв серии, кандидаты: %@", [candidates componentsJoinedByString:@", "]);
+    YumiResolveAttempt(candidates, 0, animeID, dubbing, completion);
 }
 
 @end

@@ -64,13 +64,13 @@
    ```
 2. Открой **Actions → Build → Run workflow** (или просто сделай push).
 3. Через 5–10 минут скачай артефакт **Yumi-packages**:
-   - `Yumi-1.0.9.deb` — для установки через Cydia/Filza/dpkg;
+   - `Yumi-1.0.10.deb` — для установки через Cydia/Filza/dpkg;
    - `Yumi-unsigned.ipa` — для AppSync Unified / sideload.
 
 ## Установка
 
 **Вариант 1 — .deb (рекомендуется, iOS 12 rootful: unc0ver / checkra1n):**
-- открыть `.deb` в Filza → Install, или по SSH: `dpkg -i Yumi-1.0.9.deb`, затем `uicache -a`;
+- открыть `.deb` в Filza → Install, или по SSH: `dpkg -i Yumi-1.0.10.deb`, затем `uicache -a`;
 - приложение появится на рабочем столе как **Yumi**.
 
 **Вариант 2 — .ipa:**

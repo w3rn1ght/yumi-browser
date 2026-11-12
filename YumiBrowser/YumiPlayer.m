@@ -1,6 +1,7 @@
 #import "YumiPlayer.h"
 #import "YumiIcons.h"
 #import "YumiResumeStore.h"
+#import "YumiSettings.h"
 #import <AVKit/AVKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import <math.h>
@@ -26,6 +27,7 @@ static NSString *YumiEncode(NSString *s) {
 @property (nonatomic, assign) BOOL externalQuality;
 @property (nonatomic, assign) BOOL didFetchQualities;
 @property (nonatomic, assign) BOOL didDismiss;
+@property (nonatomic, strong) NSTimer *qualityTimer;
 
 @property (nonatomic, strong) id timeObserver;
 @property (nonatomic, strong) UIView *errorView;
@@ -73,6 +75,14 @@ static NSString *YumiEncode(NSString *s) {
     [self setupErrorView];
     [self startPlayback];
 
+    // У AVPlayerViewController на iOS 12 нет публичного API «контролы видны».
+    // Поэтому повторяем поведение штатных контролов: тап по видео показывает
+    // кнопку качества на несколько секунд, дальше она плавно исчезает.
+    UITapGestureRecognizer *tap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(playerTapped:)];
+    tap.cancelsTouchesInView = NO;
+    [self.playerVC.view addGestureRecognizer:tap];
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(saveProgress)
                                                  name:UIApplicationDidEnterBackgroundNotification
@@ -98,6 +108,8 @@ static NSString *YumiEncode(NSString *s) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self.qualityTimer invalidate];
+    self.qualityTimer = nil;
     [self saveProgress];
     [self.player pause];
 }
@@ -155,13 +167,76 @@ static NSString *YumiEncode(NSString *s) {
 
 - (void)updateQualityButton {
     BOOL show = (self.qualityOptions.count >= 2);
-    self.qualityButton.hidden = !show;
-    if (!show) return;
+    if (!show) {
+        [self.qualityTimer invalidate];
+        self.qualityTimer = nil;
+        self.qualityButton.hidden = YES;
+        return;
+    }
 
     NSString *title = self.selectedQualityTitle.length ? self.selectedQualityTitle : @"Авто";
     [self.qualityButton setTitle:[title stringByAppendingString:@" ▾"]
                         forState:UIControlStateNormal];
+
+    if ([[YumiSettings shared] alwaysShowQuality]) {
+        self.qualityButton.hidden = NO;
+        self.qualityButton.alpha = 1.0;
+        self.qualityButton.userInteractionEnabled = YES;
+        [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
+        return;
+    }
+
+    [self showQualityPillTemporarily];
+}
+
+- (void)playerTapped:(UIGestureRecognizer *)recognizer {
+    [self showQualityPillTemporarily];
+}
+
+- (void)showQualityPillTemporarily {
+    if (self.qualityOptions.count < 2) return;
+    if ([YumiSettings shared].alwaysShowQuality) {
+        [self updateQualityButtonVisibilityPinned];
+        return;
+    }
+
+    [self.qualityTimer invalidate];
+    self.qualityTimer = nil;
+
+    self.qualityButton.hidden = NO;
+    self.qualityButton.userInteractionEnabled = YES;
+    self.qualityButton.alpha = 1.0;
     [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
+
+    self.qualityTimer = [NSTimer scheduledTimerWithTimeInterval:3.5
+                                                         target:self
+                                                       selector:@selector(qualityPillTimeout:)
+                                                       userInfo:nil
+                                                        repeats:NO];
+}
+
+- (void)updateQualityButtonVisibilityPinned {
+    self.qualityButton.hidden = NO;
+    self.qualityButton.alpha = 1.0;
+    self.qualityButton.userInteractionEnabled = YES;
+    [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
+}
+
+- (void)qualityPillTimeout:(NSTimer *)timer {
+    self.qualityTimer = nil;
+    if (self.qualityOptions.count < 2) return;
+    if ([YumiSettings shared].alwaysShowQuality) return;
+
+    [UIView animateWithDuration:0.2
+                     animations:^{
+        self.qualityButton.alpha = 0.0;
+    } completion:^(__unused BOOL finished) {
+        // Невидимая кнопка не должна перехватывать тапы по контролам плеера.
+        if (self.qualityButton.alpha < 0.01) {
+            self.qualityButton.hidden = YES;
+            self.qualityButton.userInteractionEnabled = NO;
+        }
+    }];
 }
 
 - (void)qualityTapped {
@@ -380,6 +455,7 @@ static NSString *YumiEncode(NSString *s) {
     self.player = player;
     self.playerVC.player = player;
     self.errorView.hidden = YES;
+    [self showQualityPillTemporarily];
 
     __weak typeof(self) weakSelf = self;
     self.timeObserver = [player addPeriodicTimeObserverForInterval:CMTimeMakeWithSeconds(5.0, NSEC_PER_SEC)
@@ -426,6 +502,7 @@ static NSString *YumiEncode(NSString *s) {
     self.errorLabel.text = message.length ? message : @"Поток не открылся. Возможно, нужен Referer, другой UA или внешний плеер.";
     self.errorView.hidden = NO;
     [self.view bringSubviewToFront:self.errorView];
+    [self showQualityPillTemporarily];
     [self.qualityButton.superview bringSubviewToFront:self.qualityButton];
 }
 
@@ -537,6 +614,7 @@ static NSString *YumiEncode(NSString *s) {
     [YumiResumeStore saveForPageID:self.resumeKey
                            animeID:self.animeID
                            episode:self.episode
+                      episodeParam:self.episodeParam
                            dubbing:self.dubbing
                               time:time
                           duration:duration
@@ -544,6 +622,7 @@ static NSString *YumiEncode(NSString *s) {
 }
 
 - (void)dealloc {
+    [self.qualityTimer invalidate];
     if (self.timeObserver && self.player) {
         @try { [self.player removeTimeObserver:self.timeObserver]; } @catch (NSException *e) {}
     }

@@ -9,6 +9,7 @@
 @property (nonatomic, copy) NSString *resumeKey;     // id страницы тайтла (для памяти просмотра)
 @property (nonatomic, copy) NSString *animeID;
 @property (nonatomic, copy) NSString *episode;
+@property (nonatomic, copy) NSString *episodeParam;   // параметр серии для CVH (может отличаться от номера)
 @property (nonatomic, copy) NSString *dubbing;
 @property (nonatomic, assign) NSTimeInterval startTime;
 @property (nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *qualityOptions;

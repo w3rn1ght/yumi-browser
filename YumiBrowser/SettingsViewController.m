@@ -5,7 +5,8 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     YumiSettingsSwitchMediaHook = 100,
     YumiSettingsSwitchAutoPlayer,
     YumiSettingsSwitchWebPCovers,
-    YumiSettingsSwitchAdblock
+    YumiSettingsSwitchAdblock,
+    YumiSettingsSwitchQualityPinned
 };
 
 @implementation SettingsViewController
@@ -31,7 +32,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
         case 0: return 3;   // версия сайта, UA, поисковик
-        case 1: return 3;   // перехват, авто-плеер, WebP-обложки
+        case 1: return 4;   // перехват, авто-плеер, WebP-обложки, кнопка качества
         case 2: return 1;   // реклама
         case 3: return 2;   // очистить данные, сброс
         default: return 3;  // о приложении
@@ -112,9 +113,14 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
                                          tag:YumiSettingsSwitchAutoPlayer
                                           on:s.autoNativePlayer];
         }
-        return [self switchCellWithTitle:@"WebP-обложки AniLibria"
-                                     tag:YumiSettingsSwitchWebPCovers
-                                      on:s.webpCoversEnabled];
+        if (indexPath.row == 2) {
+            return [self switchCellWithTitle:@"WebP-обложки AniLibria"
+                                         tag:YumiSettingsSwitchWebPCovers
+                                          on:s.webpCoversEnabled];
+        }
+        return [self switchCellWithTitle:@"Кнопка качества всегда видна"
+                                     tag:YumiSettingsSwitchQualityPinned
+                                      on:s.alwaysShowQuality];
     }
 
     if (indexPath.section == 2) {
@@ -160,6 +166,7 @@ typedef NS_ENUM(NSInteger, YumiSettingsSwitchTag) {
     else if (sw.tag == YumiSettingsSwitchAutoPlayer) s.autoNativePlayer = sw.isOn;
     else if (sw.tag == YumiSettingsSwitchWebPCovers) s.webpCoversEnabled = sw.isOn;
     else if (sw.tag == YumiSettingsSwitchAdblock) s.adblockEnabled = sw.isOn;
+    else if (sw.tag == YumiSettingsSwitchQualityPinned) s.alwaysShowQuality = sw.isOn;
     [self.delegate settingsDidChange:self];
 }
 

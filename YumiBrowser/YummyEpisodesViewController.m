@@ -25,6 +25,8 @@
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UILabel *errorLabel;
 @property (nonatomic, strong) UIView *busyOverlay;
+@property (nonatomic, assign) NSInteger episodeShift;
+@property (nonatomic, assign) NSInteger titleTaps;
 @end
 
 @implementation YummyEpisodesViewController
@@ -57,8 +59,22 @@
                                                       target:self
                                                       action:@selector(close)];
 
+    // Ручной сдвиг нумерации: если у конкретного тайтла серии всё равно
+    // съезжают на одну, это правится здесь и запоминается для тайтла.
+    self.episodeShift = [[NSUserDefaults standardUserDefaults] integerForKey:[self shiftKey]];
+    self.navigationItem.leftBarButtonItem =
+        [[UIBarButtonItem alloc] initWithTitle:@"Сдвиг"
+                                         style:UIBarButtonItemStylePlain
+                                        target:self
+                                        action:@selector(chooseShift)];
+
     [self setupViews];
     [self loadEpisodes];
+}
+
+- (NSString *)shiftKey {
+    NSString *pageID = self.pageID ?: @"";
+    return [@"YumiEpisodeShift_" stringByAppendingString:pageID];
 }
 
 - (void)close {
@@ -96,6 +112,9 @@
     title.text = self.pageTitle.length ? self.pageTitle : @"Выбор серии";
     [card addSubview:title];
     self.titleLabel = title;
+    title.userInteractionEnabled = YES;
+    [title addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self
+                                                                        action:@selector(titleTapped)]];
 
     self.episodeRow = [self rowWithCaption:@"СЕРИЯ"
                                 valueLabel:&_episodeValueLabel
@@ -333,7 +352,10 @@
     NSMutableDictionary<NSString *, NSMutableArray<NSDictionary *> *> *byEpisode = [NSMutableDictionary dictionary];
 
     for (NSDictionary *item in episodes) {
-        NSString *episode = [item[@"episode"] description];
+        // Показываем номер серии (number), а не служебный параметр плеера сайта:
+        // именно он совпадает с тем, что видит пользователь на сайте.
+        NSString *episode = [item[@"number"] description];
+        if (!episode.length) episode = [item[@"episode"] description];
         if (!episode.length) continue;
 
         NSMutableArray *rows = byEpisode[episode];
@@ -429,6 +451,9 @@
     NSMutableArray *parts = [NSMutableArray array];
     if (durationText.length) [parts addObject:durationText];
     if (player.length) [parts addObject:player];
+    if (self.episodeShift != 0) {
+        [parts addObject:[NSString stringWithFormat:@"сдвиг %+ld", (long)self.episodeShift]];
+    }
     self.detailLabel.text = [parts componentsJoinedByString:@" · "];
 
     NSTimeInterval start = [self startTimeForSelection];
@@ -503,6 +528,95 @@
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
+#pragma mark - Сдвиг нумерации
+
+- (void)chooseShift {
+    NSString *title = self.episodeShift == 0
+        ? @"Сдвиг нумерации: нет"
+        : [NSString stringWithFormat:@"Сдвиг нумерации: %+ld", (long)self.episodeShift];
+
+    UIAlertController *sheet =
+        [UIAlertController alertControllerWithTitle:title
+                                            message:@"Если сайт и плеер нумеруют серии по-разному, сдвинь номер на ±1. "
+                                                    @"Настройка запоминается для этого тайтла."
+                                     preferredStyle:UIAlertControllerStyleActionSheet];
+
+    for (NSInteger value = -2; value <= 2; value++) {
+        NSString *actionTitle = value == 0
+            ? @"Без сдвига"
+            : [NSString stringWithFormat:@"%+ld", (long)value];
+        if (value == self.episodeShift) {
+            actionTitle = [@"✓ " stringByAppendingString:actionTitle];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:actionTitle
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(__unused UIAlertAction *action) {
+            self.episodeShift = value;
+            [[NSUserDefaults standardUserDefaults] setInteger:value forKey:[self shiftKey]];
+            [self updateUI];
+        }]];
+    }
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Отмена" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.barButtonItem = self.navigationItem.leftBarButtonItem;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+#pragma mark - Диагностика
+
+- (void)titleTapped {
+    self.titleTaps += 1;
+    if (self.titleTaps < 5) return;
+    self.titleTaps = 0;
+    [self showRawEpisodes];
+}
+
+- (void)showRawEpisodes {
+    NSMutableString *text = [NSMutableString string];
+    [text appendFormat:@"pageID: %@\n\n", self.pageID ?: @"—"];
+
+    NSArray<NSString *> *keys = self.episodeNumbers ?: @[];
+    for (NSString *key in keys) {
+        [text appendFormat:@"— Серия %@\n", key];
+        for (NSDictionary *row in self.voices[key] ?: @[]) {
+            [text appendFormat:@"   number=%@ param=%@ epParam=%@ dubbing=%@ player=%@\n   iframe=%@\n",
+             row[@"number"], row[@"episode"], row[@"epParam"],
+             row[@"dubbing"], row[@"player"], row[@"iframe"]];
+        }
+    }
+    if (!keys.count) {
+        [text appendString:@"Нет данных: список серий не загрузился."];
+    }
+
+    UITextView *view = [[UITextView alloc] initWithFrame:CGRectZero];
+    view.editable = NO;
+    view.font = [UIFont fontWithName:@"Menlo" size:10.5] ?: [UIFont systemFontOfSize:11];
+    view.text = text;
+
+    UIViewController *vc = [[UIViewController alloc] init];
+    vc.title = @"Диагностика серий";
+    vc.view.backgroundColor = [UIColor whiteColor];
+    view.translatesAutoresizingMaskIntoConstraints = NO;
+    [vc.view addSubview:view];
+    [NSLayoutConstraint activateConstraints:@[
+        [view.topAnchor constraintEqualToAnchor:vc.view.safeAreaLayoutGuide.topAnchor],
+        [view.leadingAnchor constraintEqualToAnchor:vc.view.leadingAnchor],
+        [view.trailingAnchor constraintEqualToAnchor:vc.view.trailingAnchor],
+        [view.bottomAnchor constraintEqualToAnchor:vc.view.bottomAnchor]
+    ]];
+    vc.navigationItem.rightBarButtonItem =
+        [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                                                      target:self
+                                                      action:@selector(closeDiagnostics)];
+
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)closeDiagnostics {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
 #pragma mark - Play
 
 - (void)playTapped {
@@ -515,13 +629,17 @@
     NSString *dubbing = self.selectedVoice;
     NSTimeInterval start = [self startTimeForSelection];
     NSString *animeID = [source[@"animeID"] description] ?: @"";
+    NSString *episodeParam = [source[@"epParam"] description] ?: episode;
+
+    NSMutableDictionary *requested = [source mutableCopy];
+    requested[@"epShift"] = @(self.episodeShift);
 
     __weak typeof(self) weakSelf = self;
     if (!self.resolveBlock) {
         [self setBusy:NO];
         return;
     }
-    self.resolveBlock(source, episode ?: @"", ^(NSURL *url,
+    self.resolveBlock(requested, episode ?: @"", ^(NSURL *url,
                                                  NSDictionary<NSString *,NSString *> *headers,
                                                  NSArray<NSDictionary<NSString *,NSString *> *> *qualities,
                                                  NSString *title,
@@ -552,6 +670,7 @@
             @"pageID": self.pageID ?: @"",
             @"animeID": animeID,
             @"episode": episode ?: @"",
+            @"episodeParam": episodeParam ?: @"",
             @"dubbing": dubbing ?: @"",
             @"startTime": @(start)
         } mutableCopy];
