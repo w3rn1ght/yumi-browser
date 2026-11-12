@@ -18,6 +18,45 @@
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
+static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
+
+#pragma mark - Material You
+
+- (void)applyMaterialTheme {
+    UIColor *primary = [UIColor colorWithRed:0.404 green:0.314 blue:0.643 alpha:1.0];
+    UIColor *surface = [UIColor colorWithRed:0.996 green:0.969 blue:1.0 alpha:1.0];
+    UIColor *container = [UIColor colorWithRed:0.910 green:0.878 blue:0.945 alpha:1.0];
+    UIColor *onSurface = [UIColor colorWithRed:0.110 green:0.098 blue:0.129 alpha:1.0];
+
+    self.view.tintColor = primary;
+    self.view.backgroundColor = surface;
+
+    UINavigationBar *bar = self.navigationController.navigationBar;
+    bar.barTintColor = surface;
+    bar.translucent = NO;
+    bar.shadowImage = [UIImage new];
+    [bar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+    bar.titleTextAttributes = @{ NSForegroundColorAttributeName: onSurface };
+
+    UIToolbar *toolbar = self.navigationController.toolbar;
+    toolbar.barTintColor = surface;
+    toolbar.translucent = NO;
+    toolbar.shadowImage = [UIImage new];
+    [toolbar setBackgroundImage:[UIImage new] forToolbarPosition:UIBarPositionAny
+                    barMetrics:UIBarMetricsDefault];
+
+    UITextField *field = self.addressField;
+    field.borderStyle = UITextBorderStyleNone;
+    field.backgroundColor = container;
+    field.layer.cornerRadius = 16.0;
+    field.layer.masksToBounds = YES;
+    field.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    field.textColor = onSurface;
+    field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14, 32)];
+    field.leftViewMode = UITextFieldViewModeAlways;
+
+    self.progressView.progressTintColor = primary;
+}
 
 @interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate, GitHubSearchViewControllerDelegate>
 
@@ -117,6 +156,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                                                object:nil];
 
     [self restoreSession];
+    [self applyMaterialTheme];
     [self updateIncognitoAppearance];
     [self updateChrome];
 }
@@ -124,6 +164,7 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     self.navigationController.toolbarHidden = NO;
+    [self applyMaterialTheme];
     [self updateIncognitoAppearance];
     [self updateChrome];
 }
@@ -1350,12 +1391,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     }
 
     NSMutableArray *urls = [NSMutableArray array];
+    NSMutableArray *titles = [NSMutableArray array];
     for (YumiTab *tab in self.tabs) {
         NSString *string = tab.url.absoluteString;
         if (!string.length) string = tab.pendingURLString;
         [urls addObject:string ?: @""];
+        NSString *title = tab.title;
+        if (!title.length || [title isEqualToString:@"Новая вкладка"]) {
+            NSURL *tabURL = [NSURL URLWithString:string ?: @""];
+            title = tabURL.host.length ? tabURL.host : @"";
+        }
+        [titles addObject:title ?: @""];
     }
     [defaults setObject:urls forKey:kYumiSessionURLs];
+    [defaults setObject:titles forKey:kYumiSessionTitles];
     [defaults setInteger:self.activeIndex forKey:kYumiSessionIndex];
     [defaults synchronize];
 }
@@ -1364,13 +1413,26 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSArray *urls = [defaults arrayForKey:kYumiSessionURLs];
 
+    NSArray *titles = [defaults arrayForKey:kYumiSessionTitles];
+
     if (urls.count) {
-        for (id item in urls) {
+        for (NSUInteger i = 0; i < urls.count; i++) {
+            id item = urls[i];
             YumiTab *tab = [self createTab];
             if ([item isKindOfClass:[NSString class]] && [item length] &&
                 ![item isEqualToString:@"about:blank"]) {
                 tab.pendingURLString = item;
             }
+
+            // Восстановленные вкладки ещё не загружены, поэтому названия берём
+            // из сессии — иначе все они выглядели бы как «Новая вкладка».
+            NSString *savedTitle = (i < titles.count) ? [titles[i] description] : @"";
+            if (!savedTitle.length) {
+                NSURL *savedURL = [NSURL URLWithString:[item description] ?: @""];
+                savedTitle = savedURL.host.length ? savedURL.host : @"";
+            }
+            if (savedTitle.length) tab.title = savedTitle;
+
             [self.tabs addObject:tab];
         }
 

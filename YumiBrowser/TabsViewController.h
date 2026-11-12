@@ -8,7 +8,7 @@
 - (void)tabsControllerDidRequestNewTab:(TabsViewController *)controller;
 @end
 
-@interface TabsViewController : UITableViewController
+@interface TabsViewController : UIViewController
 
 - (instancetype)initWithTabs:(NSArray<YumiTab *> *)tabs activeIndex:(NSInteger)activeIndex;
 
