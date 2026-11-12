@@ -106,7 +106,7 @@
     if (indexPath.row >= (NSInteger)entries.count) return;
 
     NSDictionary *entry = entries[(NSUInteger)indexPath.row];
-    UIPasteboard generalPasteboard.string = [[YumiDiagnostics shared] plainText];
+    [UIPasteboard generalPasteboard].string = [[YumiDiagnostics shared] plainText];
     UIAlertController *alert =
         [UIAlertController alertControllerWithTitle:[entry[@"kind"] description]
                                             message:[NSString stringWithFormat:@"%@\n\n%@\n\n(журнал скопирован)",
