@@ -11,9 +11,7 @@ static UIColor *YumiM3Surface(void) {
 static UIColor *YumiM3SurfaceContainer(void) {
     return [UIColor colorWithRed:0.953 green:0.929 blue:0.980 alpha:1.0];   // #F3EDFA
 }
-static UIColor *YumiM3PrimaryContainer(void) {
-    return [UIColor colorWithRed:0.910 green:0.878 blue:0.945 alpha:1.0];   // #E8E0F1
-}
+
 static UIColor *YumiM3OnSurface(void) {
     return [UIColor colorWithRed:0.110 green:0.098 blue:0.129 alpha:1.0];
 }
