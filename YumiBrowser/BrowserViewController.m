@@ -17,6 +17,8 @@
 #import "DownloadsViewController.h"
 #import "YumiHistoryStore.h"
 #import "HistoryViewController.h"
+#import "YumiDiagnostics.h"
+#import "DiagnosticsViewController.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
@@ -525,6 +527,15 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     [self presentController:nav];
 }
 
+#pragma mark - Диагностика
+
+- (void)showDiagnostics {
+    DiagnosticsViewController *vc = [[DiagnosticsViewController alloc] initWithStyle:UITableViewStylePlain];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentController:nav];
+}
+
 #pragma mark - История
 
 - (void)showHistory {
@@ -648,6 +659,9 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Вкладки (%lu)", (unsigned long)self.tabs.count]
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showTabs]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Диагностика"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self showDiagnostics]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"История"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showHistory]; }]];
@@ -1919,10 +1933,30 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     } else if ([type isEqualToString:@"cf"]) {
         NSLog(@"[Yumi] CF challenge: page=%@ markers=%@ turnstile=%@ ua=%@",
               message[@"page"], message[@"markers"], message[@"turnstile"], message[@"ua"]);
+        [[YumiDiagnostics shared] addKind:@"cloudflare"
+                                     page:[message[@"page"] description]
+                                  message:[NSString stringWithFormat:@"markers: %@ · turnstile: %@",
+                                           [message[@"markers"] description],
+                                           [message[@"turnstile"] description]]
+                                   source:[message[@"ua"] description]];
     } else if ([type isEqualToString:@"jserror"]) {
         NSLog(@"[Yumi] JS %@: %@ %@:%@ %@",
               message[@"kind"], message[@"message"] ?: message[@"tag"],
               message[@"source"] ?: message[@"url"], message[@"line"], message[@"page"]);
+        NSString *kind = [message[@"kind"] description] ?: @"js";
+        NSString *detail = [message[@"message"] description];
+        if (!detail.length) {
+            detail = [NSString stringWithFormat:@"%@ %@", [message[@"tag"] description],
+                      [message[@"url"] description]];
+        }
+        NSString *source = [message[@"source"] description] ?: @"";
+        if ([message[@"line"] description].length && ![message[@"line"] isEqual:@0]) {
+            source = [source stringByAppendingFormat:@":%@", [message[@"line"] description]];
+        }
+        [[YumiDiagnostics shared] addKind:[@"JS " stringByAppendingString:kind]
+                                     page:[message[@"page"] description]
+                                  message:detail
+                                   source:source];
     }
 }
 
