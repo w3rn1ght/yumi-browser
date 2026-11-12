@@ -20,43 +20,6 @@ static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 
-#pragma mark - Material You
-
-- (void)applyMaterialTheme {
-    UIColor *primary = [UIColor colorWithRed:0.404 green:0.314 blue:0.643 alpha:1.0];
-    UIColor *surface = [UIColor colorWithRed:0.996 green:0.969 blue:1.0 alpha:1.0];
-    UIColor *container = [UIColor colorWithRed:0.910 green:0.878 blue:0.945 alpha:1.0];
-    UIColor *onSurface = [UIColor colorWithRed:0.110 green:0.098 blue:0.129 alpha:1.0];
-
-    self.view.tintColor = primary;
-    self.view.backgroundColor = surface;
-
-    UINavigationBar *bar = self.navigationController.navigationBar;
-    bar.barTintColor = surface;
-    bar.translucent = NO;
-    bar.shadowImage = [UIImage new];
-    [bar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
-    bar.titleTextAttributes = @{ NSForegroundColorAttributeName: onSurface };
-
-    UIToolbar *toolbar = self.navigationController.toolbar;
-    toolbar.barTintColor = surface;
-    toolbar.translucent = NO;
-    toolbar.shadowImage = [UIImage new];
-    [toolbar setBackgroundImage:[UIImage new] forToolbarPosition:UIBarPositionAny
-                    barMetrics:UIBarMetricsDefault];
-
-    UITextField *field = self.addressField;
-    field.borderStyle = UITextBorderStyleNone;
-    field.backgroundColor = container;
-    field.layer.cornerRadius = 16.0;
-    field.layer.masksToBounds = YES;
-    field.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-    field.textColor = onSurface;
-    field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14, 32)];
-    field.leftViewMode = UITextFieldViewModeAlways;
-
-    self.progressView.progressTintColor = primary;
-}
 
 @interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate, GitHubSearchViewControllerDelegate>
 
@@ -107,6 +70,7 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
                userAgent:(NSString *)userAgent;
 - (void)updateIncognitoAppearance;
 - (void)setIncognitoMode:(BOOL)enable;
+- (void)applyMaterialTheme;
 
 @end
 
@@ -187,6 +151,44 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 }
 
 #pragma mark - UI
+
+#pragma mark - Material You
+
+- (void)applyMaterialTheme {
+    UIColor *primary = [UIColor colorWithRed:0.404 green:0.314 blue:0.643 alpha:1.0];
+    UIColor *surface = [UIColor colorWithRed:0.996 green:0.969 blue:1.0 alpha:1.0];
+    UIColor *container = [UIColor colorWithRed:0.910 green:0.878 blue:0.945 alpha:1.0];
+    UIColor *onSurface = [UIColor colorWithRed:0.110 green:0.098 blue:0.129 alpha:1.0];
+
+    self.view.tintColor = primary;
+    self.view.backgroundColor = surface;
+
+    UINavigationBar *bar = self.navigationController.navigationBar;
+    bar.barTintColor = surface;
+    bar.translucent = NO;
+    bar.shadowImage = [UIImage new];
+    [bar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+    bar.titleTextAttributes = @{ NSForegroundColorAttributeName: onSurface };
+
+    UIToolbar *toolbar = self.navigationController.toolbar;
+    toolbar.barTintColor = surface;
+    toolbar.translucent = NO;
+    toolbar.shadowImage = [UIImage new];
+    [toolbar setBackgroundImage:[UIImage new] forToolbarPosition:UIBarPositionAny
+                    barMetrics:UIBarMetricsDefault];
+
+    UITextField *field = self.addressField;
+    field.borderStyle = UITextBorderStyleNone;
+    field.backgroundColor = container;
+    field.layer.cornerRadius = 16.0;
+    field.layer.masksToBounds = YES;
+    field.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    field.textColor = onSurface;
+    field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14, 32)];
+    field.leftViewMode = UITextFieldViewModeAlways;
+
+    self.progressView.progressTintColor = primary;
+}
 
 - (void)setupAddressField {
     UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 200, 32)];
