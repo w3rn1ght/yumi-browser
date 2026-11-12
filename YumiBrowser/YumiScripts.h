@@ -11,5 +11,6 @@
 + (NSString *)anilibriaCompat;
 + (NSString *)downloadLinks;
 + (NSString *)challengeWatchdog;
++ (NSString *)diagnostics;
 
 @end

@@ -1820,6 +1820,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     } else if ([type isEqualToString:@"cf"]) {
         NSLog(@"[Yumi] CF challenge: page=%@ markers=%@ turnstile=%@ ua=%@",
               message[@"page"], message[@"markers"], message[@"turnstile"], message[@"ua"]);
+    } else if ([type isEqualToString:@"jserror"]) {
+        NSLog(@"[Yumi] JS %@: %@ %@:%@ %@",
+              message[@"kind"], message[@"message"] ?: message[@"tag"],
+              message[@"source"] ?: message[@"url"], message[@"line"], message[@"page"]);
     }
 }
 

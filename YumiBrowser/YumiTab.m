@@ -82,6 +82,14 @@ static void YumiEnableWebGL(WKPreferences *prefs) {
         }
     }
 
+    // Ошибки JS и незагруженные ресурсы — в лог приложения.
+    NSString *diag = [YumiScripts diagnostics];
+    if (diag.length) {
+        [ucc addUserScript:[[WKUserScript alloc] initWithSource:diag
+                                                   injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                                                forMainFrameOnly:NO]];
+    }
+
     // Диагностика Cloudflare: скрипт сам решает, есть ли на странице челлендж,
     // и просто сообщает об этом приложению (никуда не вмешивается).
     NSString *watchdog = [YumiScripts challengeWatchdog];

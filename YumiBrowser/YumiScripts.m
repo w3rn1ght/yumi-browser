@@ -30,5 +30,6 @@
 + (NSString *)anilibriaCompat { return [self stringFromResource:@"anilibria-compat" extension:@"js"]; }
 + (NSString *)downloadLinks { return [self stringFromResource:@"download-links" extension:@"js"]; }
 + (NSString *)challengeWatchdog { return [self stringFromResource:@"challenge-watchdog" extension:@"js"]; }
++ (NSString *)diagnostics { return [self stringFromResource:@"diagnostics" extension:@"js"]; }
 
 @end
