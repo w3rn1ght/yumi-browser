@@ -15,17 +15,21 @@
 #import "YumiAnilibriaResolver.h"
 #import "YumiDownloadManager.h"
 #import "DownloadsViewController.h"
+#import "YumiHistoryStore.h"
+#import "HistoryViewController.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 
 
-@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate, GitHubSearchViewControllerDelegate>
+@interface BrowserViewController () <TabsViewControllerDelegate, SettingsViewControllerDelegate, WKUIDelegate, UIGestureRecognizerDelegate, YummyEpisodesViewControllerDelegate, GitHubSearchViewControllerDelegate, HistoryViewControllerDelegate>
 
 @property (nonatomic, strong) NSMutableArray<YumiTab *> *tabs;
 @property (nonatomic, assign) NSInteger activeIndex;
 @property (nonatomic, assign) BOOL incognito;
+@property (nonatomic, strong) NSMutableArray<YumiTab *> *normalTabs;
+@property (nonatomic, strong) NSMutableArray<YumiTab *> *privateTabs;
 @property (nonatomic, strong) WKWebsiteDataStore *incognitoDataStore;
 
 @property (nonatomic, strong) UITextField *addressField;
@@ -79,6 +83,8 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 - (instancetype)init {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _tabs = [NSMutableArray array];
+        _normalTabs = _tabs;
+        _privateTabs = [NSMutableArray array];
         _streams = [NSMutableArray array];
         _activeIndex = 0;
     }
@@ -519,6 +525,21 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     [self presentController:nav];
 }
 
+#pragma mark - История
+
+- (void)showHistory {
+    HistoryViewController *vc = [[HistoryViewController alloc] initWithStyle:UITableViewStylePlain];
+    vc.delegate = self;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentController:nav];
+}
+
+- (void)historyController:(HistoryViewController *)controller openURL:(NSURL *)url {
+    if (!url) return;
+    [self addTabWithURLString:url.absoluteString];
+}
+
 #pragma mark - TabsViewControllerDelegate
 
 - (void)tabsController:(TabsViewController *)controller didSelectTabAtIndex:(NSInteger)index {
@@ -627,6 +648,9 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"Вкладки (%lu)", (unsigned long)self.tabs.count]
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self showTabs]; }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"История"
+                                             style:UIAlertActionStyleDefault
+                                           handler:^(__unused UIAlertAction *a) { [self showHistory]; }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Обновить"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *a) { [self reloadTapped]; }]];
@@ -694,30 +718,42 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 
 - (void)setIncognitoMode:(BOOL)enable {
     if (self.incognito == enable) return;
-    self.incognito = enable;
 
-    for (YumiTab *tab in [self.tabs copy]) {
-        tab.delegate = nil;
-        [tab.webView stopLoading];
-        [tab.webView removeFromSuperview];
+    YumiTab *current = nil;
+    if (self.activeIndex >= 0 && self.activeIndex < (NSInteger)self.tabs.count) {
+        current = self.tabs[(NSUInteger)self.activeIndex];
+        [current.webView removeFromSuperview];
     }
-    [self.tabs removeAllObjects];
+
+    // Не закрываем вкладки: у обычного режима и у инкогнито свои наборы.
+    if (enable) {
+        self.normalTabs = self.tabs;
+        if (!self.privateTabs) self.privateTabs = [NSMutableArray array];
+        self.tabs = self.privateTabs;
+        self.incognito = YES;
+    } else {
+        self.privateTabs = self.tabs;
+        if (!self.normalTabs) self.normalTabs = [NSMutableArray array];
+        self.tabs = self.normalTabs;
+        self.incognito = NO;
+    }
+
     [self.streams removeAllObjects];
     [self hideStreamBanner];
-
     self.yummyPageID = nil;
     self.anilibriaPageID = nil;
     self.resumeInfo = nil;
     self.yummyButton.hidden = YES;
     self.resumeButton.hidden = YES;
-    self.activeIndex = 0;
 
-    if (!enable) {
-        // Non-persistent store: releasing it drops all private cookies/cache.
-        _incognitoDataStore = nil;
+    if (!self.tabs.count) {
+        self.activeIndex = 0;
+        [self addHomeTab];
+    } else {
+        self.activeIndex = 0;
+        [self selectTabAtIndex:0];
     }
 
-    [self addHomeTab];
     [self updateIncognitoAppearance];
     [self showToast:(enable ? @"Режим инкогнито" : @"Обычный режим")];
 }
@@ -1941,6 +1977,10 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
 }
 
 - (void)tabDidFinishLoading:(YumiTab *)tab {
+    if (!self.incognito) {
+        NSURL *url = tab.webView.URL ?: tab.url;
+        if (url) [YumiHistoryStore recordURL:url title:tab.webView.title ?: tab.title];
+    }
     [self installCompatibilityStyleForTab:tab];
     if ([YumiAnilibriaResolver isSupportedHost:tab.webView.URL.host]) {
         [self installAnilibriaWebPSupportForTab:tab];
