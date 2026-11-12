@@ -13,6 +13,8 @@
 #import "YumiSiteStore.h"
 #import "YumiResumeStore.h"
 #import "YumiAnilibriaResolver.h"
+#import "YumiDownloadManager.h"
+#import "DownloadsViewController.h"
 
 static NSString *const kYumiSessionURLs = @"YumiSessionURLs";
 static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
@@ -48,13 +50,6 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 @property (nonatomic, copy) NSString *anilibriaPageID;
 @property (nonatomic, copy) NSDictionary *resumeInfo;
 
-@property (nonatomic, strong) UIAlertController *downloadAlert;
-@property (nonatomic, strong) NSURLSession *downloadSession;
-@property (nonatomic, strong) NSURLSessionDownloadTask *downloadTask;
-@property (nonatomic, strong) NSTimer *downloadTimer;
-@property (nonatomic, assign) BOOL downloadCancelled;
-@property (nonatomic, assign) NSUInteger downloadGeneration;
-
 - (void)installAnilibriaWebPSupportForTab:(YumiTab *)tab;
 - (void)installCompatibilityStyleForTab:(YumiTab *)tab;
 - (void)downloadURL:(NSURL *)url suggestedFilename:(NSString *)filename;
@@ -71,11 +66,6 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                  pageURL:(NSURL *)pageURL
                   cookie:(NSString *)cookie
                userAgent:(NSString *)userAgent;
-- (void)presentDownloadAlertIfCurrent:(UIAlertController *)alert;
-- (void)dismissDownloadUIWithCompletion:(void (^)(void))completion;
-- (void)cancelDownload;
-- (void)updateDownloadProgress:(NSTimer *)timer;
-- (void)presentDownloadError:(NSError *)error url:(NSURL *)url filename:(NSString *)filename;
 - (void)updateIncognitoAppearance;
 - (void)setIncognitoMode:(BOOL)enable;
 
@@ -102,6 +92,20 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
     [self setupStreamBanner];
     [self setupYummyButton];
     [self setupBridge];
+
+    // Загрузки идут в фоне: показываем только короткие тосты, никаких модалок.
+    __weak typeof(self) weakSelf = self;
+    [YumiDownloadManager shared].onEvent = ^(YumiDownloadItem *item, NSString *event) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || !item) return;
+        if ([event isEqualToString:@"start"]) {
+            [self showToast:[NSString stringWithFormat:@"Скачиваю: %@", item.filename ?: @"файл"]];
+        } else if ([event isEqualToString:@"finish"]) {
+            [self showToast:[NSString stringWithFormat:@"Скачано: %@", item.filename ?: @"файл"]];
+        } else if ([event isEqualToString:@"error"]) {
+            [self showToast:[NSString stringWithFormat:@"Ошибка загрузки: %@", item.errorMessage ?: item.filename]];
+        }
+    };
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(saveSession)
@@ -876,56 +880,10 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 - (void)openDownloadsInFilza {
-    NSString *documents = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
-                                                               NSUserDomainMask, YES) firstObject];
-    if (!documents.length) {
-        [self showToast:@"Не удалось открыть папку загрузок"];
-        return;
-    }
-    NSString *directory = [documents stringByAppendingPathComponent:@"Downloads"];
-    [[NSFileManager defaultManager] createDirectoryAtPath:directory
-                              withIntermediateDirectories:YES
-                                               attributes:nil
-                                                    error:nil];
-
-    NSString *encoded = [directory stringByAddingPercentEncodingWithAllowedCharacters:
-                         [NSCharacterSet URLPathAllowedCharacterSet]] ?: directory;
-    NSString *withoutLeadingSlash = [encoded hasPrefix:@"/"] ? [encoded substringFromIndex:1] : encoded;
-    NSArray<NSString *> *candidates = @[
-        [NSString stringWithFormat:@"filza://view%@", encoded],
-        [NSString stringWithFormat:@"filza://%@", withoutLeadingSlash],
-        @"filza://"
-    ];
-    for (NSString *candidate in candidates) {
-        NSURL *url = [NSURL URLWithString:candidate];
-        if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
-            [[UIApplication sharedApplication] openURL:url];
-            return;
-        }
-    }
-
-    UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:@"Filza не найдена"
-                                            message:[NSString stringWithFormat:@"Папка загрузок:\n%@", directory]
-                                     preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать путь"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction *action) {
-        [UIPasteboard generalPasteboard].string = directory;
-        [self showToast:@"Путь скопирован"];
-    }]];
-    NSURL *filesURL = [NSURL URLWithString:@"shareddocuments://"];
-    if (filesURL && [[UIApplication sharedApplication] canOpenURL:filesURL]) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть Файлы"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction *action) {
-            [[UIApplication sharedApplication] openURL:filesURL];
-        }]];
-    }
-    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    [self presentController:alert];
+    DownloadsViewController *vc = [[DownloadsViewController alloc] initWithStyle:UITableViewStylePlain];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentController:nav];
 }
 
 - (void)showGitHubSearch {
@@ -1088,261 +1046,15 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
                   pageURL:(NSURL *)pageURL
                    cookie:(NSString *)cookie
                 userAgent:(NSString *)userAgent {
-    self.downloadGeneration += 1;
-    NSUInteger generation = self.downloadGeneration;
-    if (self.downloadTask) {
-        self.downloadCancelled = YES;
-        [self.downloadTask cancel];
-        [self.downloadSession invalidateAndCancel];
-        [self dismissDownloadUIWithCompletion:nil];
-    }
+    if (!url) return;
 
-    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.timeoutIntervalForRequest = 300.0;
-    config.timeoutIntervalForResource = 1800.0;
-    config.HTTPShouldSetCookies = NO;
-    config.HTTPCookieAcceptPolicy = NSHTTPCookieAcceptPolicyNever;
-
-    NSString *host = url.host.lowercaseString;
-    BOOL github = [host isEqualToString:@"github.com"] ||
-                  [host hasSuffix:@".github.com"] ||
-                  [host hasSuffix:@"githubusercontent.com"];
-    // GitHub's web session may keep serving an iOS-12-specific edge for the
-    // asset redirect. A desktop UA is harmless for a signed asset URL.
-    NSString *downloadUA = github
-        ? @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
-           "(KHTML, like Gecko) Version/16.6 Safari/605.1.15"
-        : userAgent;
-
-    NSMutableURLRequest *request =
-        [NSMutableURLRequest requestWithURL:url
-                                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                            timeoutInterval:300.0];
-    [request setValue:(github ? @"application/octet-stream" : @"*/*")
-   forHTTPHeaderField:@"Accept"];
-    [request setValue:@"ru-RU,ru;q=0.9,en;q=0.8" forHTTPHeaderField:@"Accept-Language"];
-    if (downloadUA.length) [request setValue:downloadUA forHTTPHeaderField:@"User-Agent"];
-    if (cookie.length) [request setValue:cookie forHTTPHeaderField:@"Cookie"];
-    if (pageURL.absoluteString.length) [request setValue:pageURL.absoluteString forHTTPHeaderField:@"Referer"];
-
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:config
-                                                         delegate:nil
-                                                    delegateQueue:[NSOperationQueue mainQueue]];
-    NSURLSessionDownloadTask *task =
-        [session downloadTaskWithRequest:request
-                       completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-        [session finishTasksAndInvalidate];
-        if (generation != self.downloadGeneration) return;
-
-        [self.downloadTimer invalidate];
-        self.downloadTimer = nil;
-        if (self.downloadCancelled) {
-            [self dismissDownloadUIWithCompletion:nil];
-            return;
-        }
-
-        if (error || !location) {
-            NSError *downloadError = error ?: [NSError errorWithDomain:@"YumiDownload"
-                                                                  code:-1
-                                                              userInfo:@{NSLocalizedDescriptionKey: @"Не удалось скачать файл"}];
-            [self dismissDownloadUIWithCompletion:^{
-                [self presentDownloadError:downloadError url:url filename:filename];
-            }];
-            return;
-        }
-
-        NSString *mime = [(response.MIMEType ?: @"") lowercaseString];
-        if ([mime containsString:@"text/html"]) {
-            NSError *htmlError = [NSError errorWithDomain:@"YumiDownload"
-                                                     code:-2
-                                                 userInfo:@{NSLocalizedDescriptionKey:
-                    @"Сервер вернул страницу вместо файла. Для приватного репозитория GitHub сначала войди в аккаунт."}];
-            [self dismissDownloadUIWithCompletion:^{
-                [self presentDownloadError:htmlError url:url filename:filename];
-            }];
-            return;
-        }
-
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *name = filename.length ? filename : response.suggestedFilename;
-        if (!name.length) name = url.lastPathComponent;
-        name = [name stringByRemovingPercentEncoding] ?: name;
-        name = [name stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
-        name = [name stringByReplacingOccurrencesOfString:@"\\" withString:@"_"];
-        name = [name stringByReplacingOccurrencesOfString:@":" withString:@"_"];
-        name = [name stringByTrimmingCharactersInSet:
-                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (!name.length || [name isEqualToString:@"."] || [name isEqualToString:@".."]) {
-            name = @"download";
-        }
-        if (![name pathExtension].length && [url pathExtension].length) {
-            name = [name stringByAppendingPathExtension:url.pathExtension];
-        }
-
-        NSString *documents = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
-                                                                   NSUserDomainMask, YES) firstObject];
-        NSString *directory = [documents stringByAppendingPathComponent:@"Downloads"];
-        [fm createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
-
-        NSString *destination = [directory stringByAppendingPathComponent:name];
-        if ([fm fileExistsAtPath:destination]) {
-            NSString *base = [name stringByDeletingPathExtension];
-            NSString *extension = [name pathExtension];
-            NSInteger index = 1;
-            do {
-                NSString *candidate = extension.length
-                    ? [NSString stringWithFormat:@"%@-%ld.%@", base, (long)index, extension]
-                    : [NSString stringWithFormat:@"%@-%ld", base, (long)index];
-                destination = [directory stringByAppendingPathComponent:candidate];
-                index += 1;
-            } while ([fm fileExistsAtPath:destination]);
-        }
-
-        NSURL *destinationURL = [NSURL fileURLWithPath:destination];
-        NSError *fileError = nil;
-        BOOL saved = [fm moveItemAtURL:location toURL:destinationURL error:&fileError];
-        if (!saved) {
-            saved = [fm copyItemAtURL:location toURL:destinationURL error:&fileError];
-        }
-        if (!saved) {
-            NSError *saveError = fileError ?: [NSError errorWithDomain:@"YumiDownload"
-                                                                  code:-3
-                                                              userInfo:@{NSLocalizedDescriptionKey: @"Ошибка файловой системы"}];
-            [self dismissDownloadUIWithCompletion:^{
-                [self presentDownloadError:saveError url:url filename:filename];
-            }];
-            return;
-        }
-
-        [self dismissDownloadUIWithCompletion:^{
-            [self showToast:[NSString stringWithFormat:@"Скачано: %@", destinationURL.lastPathComponent]];
-        }];
-    }];
-
-    self.downloadCancelled = NO;
-    self.downloadSession = session;
-    self.downloadTask = task;
-
-    UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:@"Скачивание файла"
-                                            message:@"Ожидание ответа…"
-                                     preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
-                                              style:UIAlertActionStyleCancel
-                                            handler:^(__unused UIAlertAction *action) {
-        [self cancelDownload];
-    }]];
-    self.downloadAlert = alert;
-    // Fast downloads should not flash a modal. Show the progress/cancel alert
-    // only if the transfer is still running after a second.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
-        if (self.downloadTask == task && self.downloadAlert == alert) {
-            [self presentDownloadAlertIfCurrent:alert];
-        }
-    });
-    self.downloadTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
-                                                         target:self
-                                                       selector:@selector(updateDownloadProgress:)
-                                                       userInfo:nil
-                                                        repeats:YES];
-    [task resume];
-}
-
-- (void)presentDownloadAlertIfCurrent:(UIAlertController *)alert {
-    if (self.downloadAlert != alert) return;
-    UIViewController *presented = self.presentedViewController;
-    if (!presented) {
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    if ([presented isKindOfClass:[YumiPlayerViewController class]]) return;
-    [presented dismissViewControllerAnimated:YES completion:^{
-        if (self.downloadAlert == alert) {
-            [self presentViewController:alert animated:YES completion:nil];
-        }
-    }];
-}
-
-- (void)dismissDownloadUIWithCompletion:(void (^)(void))completion {
-    [self.downloadTimer invalidate];
-    self.downloadTimer = nil;
-    self.downloadTask = nil;
-    [self.downloadSession finishTasksAndInvalidate];
-    self.downloadSession = nil;
-
-    UIAlertController *alert = self.downloadAlert;
-    self.downloadAlert = nil;
-    if (alert && alert.presentingViewController) {
-        [alert dismissViewControllerAnimated:YES completion:^{
-            if (completion) completion();
-        }];
-    } else if (completion) {
-        completion();
-    }
-}
-
-- (void)cancelDownload {
-    self.downloadCancelled = YES;
-    [self.downloadTask cancel];
-    [self.downloadSession invalidateAndCancel];
-    [self dismissDownloadUIWithCompletion:^{
-        [self showToast:@"Скачивание отменено"];
-    }];
-}
-
-- (void)updateDownloadProgress:(NSTimer *)timer {
-    if (!timer || !self.downloadTask || !self.downloadAlert) return;
-    double progress = self.downloadTask.progress.fractionCompleted;
-    if (progress > 0.0 && progress <= 1.0) {
-        self.downloadAlert.message = [NSString stringWithFormat:@"Скачано %.0f%%", progress * 100.0];
-    } else {
-        self.downloadAlert.message = @"Ожидание ответа…";
-    }
-}
-
-- (void)presentDownloadError:(NSError *)error url:(NSURL *)url filename:(NSString *)filename {
-    NSString *message = error.localizedDescription ?: @"Не удалось скачать файл";
-    if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorTimedOut) {
-        message = @"Превышен таймаут загрузки. GitHub мог заблокировать release-assets.githubusercontent.com. "
-                   "Попробуй VPN, повтори загрузку или скопируй ссылку и скачай файл на ПК.";
-    }
-
-    UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:@"Ошибка скачивания"
-                                            message:message
-                                     preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Повторить"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction *action) {
-        [self downloadURL:url suggestedFilename:filename];
-    }]];
-    if ([error.domain isEqualToString:@"YumiDownload"] && error.code == -2 && url) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть страницу"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction *action) {
-            [self addTabWithURLString:url.absoluteString];
-        }]];
-    }
-    if (url) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"Открыть в Safari"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction *action) {
-            [[UIApplication sharedApplication] openURL:url];
-        }]];
-    }
-    if (url.absoluteString.length) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"Скопировать ссылку"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(__unused UIAlertAction *action) {
-            [UIPasteboard generalPasteboard].string = url.absoluteString;
-            [self showToast:@"Ссылка скопирована"];
-        }]];
-    }
-    [alert addAction:[UIAlertAction actionWithTitle:@"Отмена"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    [self presentController:alert];
+    // Никаких модальных окон: очередь живёт в YumiDownloadManager, прогресс
+    // виден в разделе «Загрузки», приложение можно свернуть.
+    [[YumiDownloadManager shared] enqueueURL:url
+                                    filename:filename
+                                     pageURL:pageURL
+                                      cookie:cookie
+                                   userAgent:userAgent];
 }
 
 - (void)showSettings {
@@ -2409,4 +2121,3 @@ static NSString *const kYumiSessionIndex = @"YumiSessionIndex";
 }
 
 @end
-
