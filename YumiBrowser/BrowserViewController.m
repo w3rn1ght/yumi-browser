@@ -173,7 +173,6 @@ static NSString *const kYumiSessionTitles = @"YumiSessionTitles";
     UIToolbar *toolbar = self.navigationController.toolbar;
     toolbar.barTintColor = surface;
     toolbar.translucent = NO;
-    toolbar.shadowImage = [UIImage new];
     [toolbar setBackgroundImage:[UIImage new] forToolbarPosition:UIBarPositionAny
                     barMetrics:UIBarMetricsDefault];
 
